@@ -681,6 +681,7 @@ const CONFIG = {
   POST_CANDIDATE_URL: '',  // Flow: POST New Candidate
   COPILOT_IFRAME_URL: '',  // Copilot Studio embed URL
   CLAUDE_API_KEY: '__CLAUDE_API_KEY__',
+  PROXY_URL: 'https://hr-pro-claude-proxy.__CF_ACCOUNT__.workers.dev',
 };
 
 // ===================== STATE =====================
@@ -1024,14 +1025,9 @@ async function sendChat(text) {
   const typingId = showTyping();
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch(CONFIG.PROXY_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'anthropic-version': '2023-06-01',
-        'x-api-key': CONFIG.CLAUDE_API_KEY,
-        'anthropic-dangerous-request-allowed': 'true'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 1000,
