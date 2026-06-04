@@ -1113,7 +1113,8 @@ function buildSystemPrompt() {
   ).join('\n');
 
   const positionList = POSITIONS.join('\n- ');
-  const branchList = BRANCHES.join(', ');
+  const branchSample = BRANCHES.slice(0, 10).join(', ');
+  const branchNote = `(มีทั้งหมด ${BRANCHES.length} สาขา เช่น ${branchSample} ฯลฯ)\nใช้ชื่อสาขาตามที่ user พิมพ์มาได้เลย ไม่ต้องแปลง`;
 
   return `คุณคือ HR Pro Agent ผู้ช่วย HR ของ Siam Makro Group
 ตอบเป็นภาษาไทยเสมอ กระชับ ชัดเจน และเป็นมืออาชีพ
@@ -1138,8 +1139,7 @@ ${candidateList || 'ไม่มีข้อมูล'}
 📌 ตำแหน่งงานที่ใช้ได้ (ใช้ชื่อเหล่านี้เท่านั้น):
 - ${positionList}
 
-🏢 สาขาที่ใช้ได้ (ใช้ชื่อเหล่านี้เท่านั้น):
-${branchList}
+🏢 สาขา: ${branchNote}
 
 🛠️ เครื่องมือที่คุณใช้ได้:
 - add_vacancy: ใช้เมื่อ user ต้องการเพิ่มตำแหน่งงานใหม่
@@ -1171,22 +1171,49 @@ async function sendChat(text) {
         system: buildSystemPrompt(),
         messages: chatHistory,
 
-        tools: [{
-          name: 'add_vacancy',
-          description: 'เพิ่มตำแหน่งงานว่างใหม่ลงในระบบ ใช้เมื่อ user ขอเพิ่มตำแหน่งงาน',
-          input_schema: {
-            type: 'object',
-            properties: {
-              Position: { type: 'string', description: 'ชื่อตำแหน่งงาน' },
-              Branch:   { type: 'string', description: 'สาขา เช่น บางนา ลาดพร้าว สำนักงานใหญ่' },
-              Count:    { type: 'number', description: 'จำนวนอัตรา' },
-              Reporter: { type: 'string', description: 'ชื่อ Recruiter ที่รับผิดชอบ' },
-              Status:   { type: 'string', description: 'สถานะ: Open, Hold, Close' },
-              OpenDate: { type: 'string', description: 'วันที่เปิดรับ format YYYY-MM-DD' },
-            },
-            required: ['Position', 'Branch']
+        tools: [
+          {
+            name: 'add_vacancy',
+            description: 'เพิ่มตำแหน่งงานว่าง 1 ตำแหน่ง',
+            input_schema: {
+              type: 'object',
+              properties: {
+                Position: { type: 'string' },
+                Branch:   { type: 'string' },
+                Count:    { type: 'number' },
+                Reporter: { type: 'string' },
+                Status:   { type: 'string' },
+                OpenDate: { type: 'string' },
+              },
+              required: ['Position', 'Branch']
+            }
+          },
+          {
+            name: 'add_vacancies',
+            description: 'เพิ่มตำแหน่งงานว่างหลายตำแหน่งพร้อมกัน ใช้เมื่อ user ระบุมากกว่า 1 ตำแหน่ง',
+            input_schema: {
+              type: 'object',
+              properties: {
+                vacancies: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      Position: { type: 'string' },
+                      Branch:   { type: 'string' },
+                      Count:    { type: 'number' },
+                      Reporter: { type: 'string' },
+                      Status:   { type: 'string' },
+                      OpenDate: { type: 'string' },
+                    },
+                    required: ['Position', 'Branch']
+                  }
+                }
+              },
+              required: ['vacancies']
+            }
           }
-        }]
+        ]
       })
     });
 
@@ -1218,6 +1245,31 @@ async function sendChat(text) {
 
       await loadVacancies();
       appendMsg('bot', `✅ เพิ่มตำแหน่ง **${toolUse.input.Position}** สาขา ${toolUse.input.Branch} เรียบร้อยแล้วครับ`);
+      chatHistory.push({ role: 'assistant', content: data.content });
+
+    } else if (toolUse && toolUse.name === 'add_vacancies') {
+      removeTyping(typingId);
+      const items = toolUse.input.vacancies || [];
+      const today = new Date().toISOString().split('T')[0];
+      appendMsg('bot', `⏳ กำลังเพิ่ม ${items.length} ตำแหน่ง...`);
+      for (const item of items) {
+        await fetch(CONFIG.POST_VACANCY_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: null,
+            Position: item.Position,
+            Branch: item.Branch,
+            Count: item.Count || 1,
+            Reporter: item.Reporter || '',
+            Status: item.Status || 'Open',
+            OpenDate: item.OpenDate || today,
+          })
+        });
+      }
+      await loadVacancies();
+      const summary = items.map(i => `• ${i.Position} — ${i.Branch}`).join('\n');
+      appendMsg('bot', `✅ เพิ่มครบ ${items.length} ตำแหน่งเรียบร้อยแล้วครับ\n\n${summary}`);
       chatHistory.push({ role: 'assistant', content: data.content });
 
     } else {
