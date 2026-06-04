@@ -1176,7 +1176,7 @@ async function sendChatMobile(text){
   box.appendChild(typing);box.scrollTop=box.scrollHeight;
 
   try {
-    const res=await fetch(CONFIG.CHAT_URL,{
+    const res=await fetch(CONFIG.PROXY_URL,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
