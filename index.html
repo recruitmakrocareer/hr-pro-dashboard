@@ -1048,8 +1048,10 @@ async function sendChat(text) {
     chatHistory.push({ role: 'assistant', content: reply });
 
   } catch (e) {
+    console.error('Chat error:', e);
+    console.error('Error details:', e.message, e.stack);
     removeTyping(typingId);
-    appendMsg('bot', 'ขออภัยครับ ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง');
+    appendMsg('bot', 'Error: ' + e.message);
     chatHistory.pop();
   }
 }
