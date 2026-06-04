@@ -1043,6 +1043,7 @@ async function sendChat(text) {
   } catch (e) {
     removeTyping(typingId);
     appendMsg('bot', 'ขออภัยครับ ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง');
+    chatHistory.pop(); // ลบ user message ออกเพื่อไม่ให้ history เสีย
   }
 }
 
