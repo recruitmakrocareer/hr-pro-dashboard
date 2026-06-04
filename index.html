@@ -923,7 +923,7 @@ async function saveVacancy() {
     OpenDate: document.getElementById('v-opendate').value,
     Notes: document.getElementById('v-notes').value,
   };
-  if (editVacancyId) payload.ID = editVacancyId;
+  payload.ID = editVacancyId || null;
   try {
     if (CONFIG.POST_VACANCY_URL) {
       await fetch(CONFIG.POST_VACANCY_URL, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
