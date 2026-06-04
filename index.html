@@ -885,8 +885,9 @@ function renderCandidates() {
 // ===================== VACANCY MODAL =====================
 function openVacancyModal(v) {
   editVacancyId = null;
+  document.getElementById('v-id').value = '';
   document.getElementById('vacancy-modal-title').textContent = 'เพิ่มตำแหน่งงานใหม่';
-  ['v-id','v-title','v-branch','v-status','v-slots','v-recruiter','v-opendate','v-notes'].forEach(id => {
+  ['v-title','v-branch','v-status','v-slots','v-recruiter','v-opendate','v-notes'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = el.type==='number'?1:'';
   });
@@ -898,15 +899,16 @@ function openVacancyModal(v) {
 function editVacancy(id) {
   const v = vacancies.find(x=>(x.id||x.ID)===id);
   if (!v) return;
-  editVacancyId = id;
+  editVacancyId = v.ID || v.id;
+  document.getElementById('v-id').value = editVacancyId;
   document.getElementById('vacancy-modal-title').textContent = 'แก้ไขตำแหน่งงาน';
-  document.getElementById('v-title').value = v.Title||'';
-  document.getElementById('v-branch').value = v.Branch||'';
-  document.getElementById('v-status').value = v.Status||'Open';
-  document.getElementById('v-slots').value = v.Slots||1;
-  document.getElementById('v-recruiter').value = v.Recruiter||v.RecruiterName||'';
+  document.getElementById('v-title').value = v.Position || v.Title || '';
+  document.getElementById('v-branch').value = v.Branch || '';
+  document.getElementById('v-status').value = getVStatus(v) || 'Open';
+  document.getElementById('v-slots').value = v.Count || v.Slots || 1;
+  document.getElementById('v-recruiter').value = v.Reporter || v.Recruiter || v.RecruiterName || '';
   document.getElementById('v-opendate').value = (v.OpenDate||'').split('T')[0];
-  document.getElementById('v-notes').value = v.Notes||'';
+  document.getElementById('v-notes').value = v.Notes || '';
   openModal('vacancy-modal');
 }
 
@@ -914,16 +916,17 @@ async function saveVacancy() {
   const title = document.getElementById('v-title').value.trim();
   const branch = document.getElementById('v-branch').value;
   if (!title||!branch) { alert('กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน'); return; }
+  const spId = document.getElementById('v-id').value;
   const payload = {
-    Title: title,
+    id: spId ? parseInt(spId) : null,
+    Position: title,
     Branch: branch,
     Status: document.getElementById('v-status').value,
-    Slots: parseInt(document.getElementById('v-slots').value)||1,
-    Recruiter: document.getElementById('v-recruiter').value,
+    Count: parseInt(document.getElementById('v-slots').value)||1,
+    Reporter: document.getElementById('v-recruiter').value,
     OpenDate: document.getElementById('v-opendate').value,
     Notes: document.getElementById('v-notes').value,
   };
-  payload.id = editVacancyId ?? null;
   try {
     if (CONFIG.POST_VACANCY_URL) {
       await fetch(CONFIG.POST_VACANCY_URL, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
