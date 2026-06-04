@@ -717,32 +717,17 @@ async function loadVacancies() {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({})
       });
-      const text = await res.text();
-      console.log('[loadVacancies] raw response:', text);
-      let data;
-      try { data = JSON.parse(text); } catch { data = null; }
-      // Power Automate / SharePoint response can come in several shapes:
-      // {value:[...]}  |  {body:{value:[...]}}  |  {body:[...]}  |  [...] directly
-      if (Array.isArray(data)) {
-        vacancies = data;
-      } else if (data?.value && Array.isArray(data.value)) {
-        vacancies = data.value;
-      } else if (data?.body?.value && Array.isArray(data.body.value)) {
-        vacancies = data.body.value;
-      } else if (Array.isArray(data?.body)) {
-        vacancies = data.body;
-      } else {
-        console.warn('[loadVacancies] unexpected format, falling back to mock. data=', data);
-        vacancies = MOCK_VACANCIES;
-      }
-      console.log('[loadVacancies] parsed vacancies:', vacancies);
+      const data = await res.json();
+      vacancies = data.value || [];
+      console.log('Column names:', Object.keys(vacancies[0] || {}));
+      console.log('First item:', vacancies[0]);
     } else {
       vacancies = MOCK_VACANCIES;
     }
     renderVacancies();
     updateKPI();
   } catch(e) {
-    console.error('[loadVacancies] error:', e);
+    console.error('loadVacancies error:', e);
     vacancies = MOCK_VACANCIES;
     renderVacancies();
     updateKPI();
