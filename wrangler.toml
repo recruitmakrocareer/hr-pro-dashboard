@@ -1,0 +1,5 @@
+name = "hr-pro-claude-proxy"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+# API Key: ตั้งค่าด้วย   wrangler secret put CLAUDE_API_KEY
