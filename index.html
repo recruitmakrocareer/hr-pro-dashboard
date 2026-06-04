@@ -1244,8 +1244,9 @@ async function sendChat(text) {
       });
 
       await loadVacancies();
-      appendMsg('bot', `✅ เพิ่มตำแหน่ง **${toolUse.input.Position}** สาขา ${toolUse.input.Branch} เรียบร้อยแล้วครับ`);
-      chatHistory.push({ role: 'assistant', content: data.content });
+      const replyText1 = `✅ เพิ่มตำแหน่ง ${toolUse.input.Position} สาขา ${toolUse.input.Branch} เรียบร้อยแล้วครับ`;
+      appendMsg('bot', replyText1);
+      chatHistory.push({ role: 'assistant', content: replyText1 });
 
     } else if (toolUse && toolUse.name === 'add_vacancies') {
       removeTyping(typingId);
@@ -1269,8 +1270,9 @@ async function sendChat(text) {
       }
       await loadVacancies();
       const summary = items.map(i => `• ${i.Position} — ${i.Branch}`).join('\n');
-      appendMsg('bot', `✅ เพิ่มครบ ${items.length} ตำแหน่งเรียบร้อยแล้วครับ\n\n${summary}`);
-      chatHistory.push({ role: 'assistant', content: data.content });
+      const replyText2 = `✅ เพิ่มครบ ${items.length} ตำแหน่งเรียบร้อยแล้วครับ\n\n${summary}`;
+      appendMsg('bot', replyText2);
+      chatHistory.push({ role: 'assistant', content: replyText2 });
 
     } else {
       const reply = data.content?.find(c => c.type === 'text')?.text || 'ขออภัยครับ ไม่สามารถรับคำตอบได้';
