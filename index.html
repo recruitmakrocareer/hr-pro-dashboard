@@ -753,10 +753,13 @@ async function loadCandidates() {
 }
 
 // ===================== KPI =====================
+function getVStatus(v) { return v.Status || 'Open'; }
+function getVTitle(v)  { return v.Position || v.Title || '-'; }
+
 function updateKPI() {
   document.getElementById('kpi-total').textContent = vacancies.length;
-  const open = vacancies.filter(v=>v.Status==='Open').length;
-  const close = vacancies.filter(v=>v.Status==='Close').length;
+  const open  = vacancies.filter(v=>getVStatus(v)==='Open').length;
+  const close = vacancies.filter(v=>getVStatus(v)==='Close').length;
   document.getElementById('kpi-open').textContent = open;
   document.getElementById('kpi-open-sub').textContent = `${open} ตำแหน่งกำลังเปิดรับ`;
   document.getElementById('kpi-close').textContent = close;
@@ -776,19 +779,20 @@ function renderVacancies(data) {
       return;
     }
     tb.innerHTML = rows.map(v => {
-      const badge = v.Status==='Open'
+      const status = getVStatus(v);
+      const badge = status==='Open'
         ? `<span class="badge badge-open">เปิดรับ</span>`
-        : v.Status==='Close'
+        : status==='Close'
         ? `<span class="badge badge-close">ปิดแล้ว</span>`
         : `<span class="badge badge-hold">Hold</span>`;
-      const date = v.OpenDate ? v.OpenDate.split('T')[0] : '-';
+      const date = (v.Created||v.OpenDate||'').split('T')[0] || '-';
       const closeDate = v.CloseDate ? v.CloseDate.split('T')[0] : '-';
       return `<tr onclick="editVacancy(${v.id||v.ID})">
-        <td class="col-title">${v.Title||'-'}</td>
+        <td class="col-title">${getVTitle(v)}</td>
         <td>${v.Branch||'-'}</td>
         <td>${badge}</td>
-        <td style="text-align:center">${v.Slots||1}</td>
-        <td>${v.Recruiter||v.RecruiterName||'-'}</td>
+        <td style="text-align:center">${v.Count||v.Slots||1}</td>
+        <td>${v.Reporter||v.Recruiter||v.RecruiterName||'-'}</td>
         <td>${date}</td>
         ${id==='vacancy-tbody-2'?`<td>${closeDate}</td>`:''}
         <td onclick="event.stopPropagation()">
@@ -804,9 +808,9 @@ function applyFilter() {
   const branch = document.getElementById('filter-branch').value;
   const search = document.getElementById('filter-search').value.toLowerCase();
   const filtered = vacancies.filter(v =>
-    (!status || v.Status===status) &&
+    (!status || getVStatus(v)===status) &&
     (!branch || v.Branch===branch) &&
-    (!search || (v.Title||'').toLowerCase().includes(search))
+    (!search || getVTitle(v).toLowerCase().includes(search))
   );
   renderVacancies(filtered);
 }
@@ -815,8 +819,8 @@ function applyVacancyFilter() {
   const status = document.getElementById('v-filter-status').value;
   const search = document.getElementById('v-filter-search').value.toLowerCase();
   const filtered = vacancies.filter(v =>
-    (!status || v.Status===status) &&
-    (!search || (v.Title||'').toLowerCase().includes(search))
+    (!status || getVStatus(v)===status) &&
+    (!search || getVTitle(v).toLowerCase().includes(search))
   );
   renderVacancies(filtered);
 }
