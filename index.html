@@ -725,6 +725,12 @@ async function loadVacancies() {
         console.log('RAW ITEM 1:', JSON.stringify(vacancies[0], null, 2));
         console.log('RAW ITEM 2:', JSON.stringify(vacancies[1], null, 2));
       }
+      console.log('Status values:', vacancies.slice(0,5).map(v => ({
+        id: v.ID,
+        title: v.Position,
+        status: v.Status,
+        statusType: typeof v.Status
+      })));
     } else {
       vacancies = MOCK_VACANCIES;
     }
@@ -757,7 +763,13 @@ async function loadCandidates() {
 }
 
 // ===================== KPI =====================
-function getVStatus(v) { return v.Status || 'Open'; }
+function getVStatus(v) {
+  const s = (v.Status || v.status || '').toString().trim();
+  if(s.toLowerCase() === 'open') return 'Open';
+  if(s.toLowerCase() === 'close' || s.toLowerCase() === 'closed') return 'Close';
+  if(s === '') return 'Open';
+  return 'Hold';
+}
 function getVTitle(v)  { return v.Position || v.Title || '-'; }
 
 function updateKPI() {
