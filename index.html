@@ -675,7 +675,7 @@ tbody tr:hover{background:#F8F7FF}
 // ===================== CONFIG =====================
 // วาง URL ของ Power Automate Flow ตรงนี้หลัง Deploy
 const CONFIG = {
-  GET_VACANCIES_URL:  '',  // Flow: GET JobVacancy List
+  GET_VACANCIES_URL:  'https://4d5e96e05cb6e591aefe0bce82117f.8e.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/7eced539609c4e658e10d8b4ca8a0c84/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=NnZW8Uu1Vq1P-CMNE4sN7gofQTfWe9VadtkB6t42zAk',
   POST_VACANCY_URL:   '',  // Flow: POST New/Edit Vacancy
   GET_CANDIDATES_URL: '',  // Flow: GET Candidates List
   POST_CANDIDATE_URL: '',  // Flow: POST New Candidate
@@ -718,8 +718,9 @@ async function loadVacancies() {
         body: JSON.stringify({})
       });
       const data = await res.json();
-      // SharePoint returns {value: [...]} via Power Automate
-      vacancies = data.value || data.body?.value || data.body || data || [];
+      vacancies = data.value || [];
+      console.log('Column names:', Object.keys(vacancies[0] || {}));
+      console.log('First item:', vacancies[0]);
     } else {
       vacancies = MOCK_VACANCIES;
     }
