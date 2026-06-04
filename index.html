@@ -680,7 +680,7 @@ const CONFIG = {
   GET_CANDIDATES_URL: '',  // Flow: GET Candidates List
   POST_CANDIDATE_URL: '',  // Flow: POST New Candidate
   COPILOT_IFRAME_URL: '',  // Copilot Studio embed URL
-  CHAT_URL: 'https://4d5e96e05cb6e591aefe0bce82117f.8e.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/054a7ae22780428199db88bcdba33491/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=YC23V2ULCPtOFQTlZBujqVaRmFZ9e5PTr4u-p59sW5I',
+  CLAUDE_API_KEY: '__CLAUDE_API_KEY__',
 };
 
 // ===================== STATE =====================
@@ -1024,17 +1024,24 @@ async function sendChat(text) {
   const typingId = showTyping();
 
   try {
-    const res = await fetch(CONFIG.CHAT_URL, {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'anthropic-version': '2023-06-01',
+        'x-api-key': CONFIG.CLAUDE_API_KEY,
+        'anthropic-dangerous-request-allowed': 'true'
+      },
       body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1000,
         system: 'คุณคือ HR Pro Agent ผู้ช่วย HR ของ Siam Makro Group ตอบเป็นภาษาไทยเสมอ กระชับ ชัดเจน และเป็นมืออาชีพ',
         messages: chatHistory
       })
     });
 
     const data = await res.json();
-    const reply = data.reply || 'ขออภัยครับ ไม่สามารถรับคำตอบได้';
+    const reply = data.content?.[0]?.text || 'ขออภัยครับ ไม่สามารถรับคำตอบได้';
 
     removeTyping(typingId);
     appendMsg('bot', reply);
@@ -1043,7 +1050,7 @@ async function sendChat(text) {
   } catch (e) {
     removeTyping(typingId);
     appendMsg('bot', 'ขออภัยครับ ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง');
-    chatHistory.pop(); // ลบ user message ออกเพื่อไม่ให้ history เสีย
+    chatHistory.pop();
   }
 }
 
