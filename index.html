@@ -1055,7 +1055,6 @@ async function sendChat(text) {
 
   appendMsg('user', msg);
   chatHistory.push({ role: 'user', content: msg });
-
   const typingId = showTyping();
 
   try {
@@ -1066,20 +1065,65 @@ async function sendChat(text) {
         model: 'claude-sonnet-4-6',
         max_tokens: 1000,
         system: buildSystemPrompt(),
-        messages: chatHistory
+        messages: chatHistory,
+
+        tools: [{
+          name: 'add_vacancy',
+          description: 'เพิ่มตำแหน่งงานว่างใหม่ลงในระบบ ใช้เมื่อ user ขอเพิ่มตำแหน่งงาน',
+          input_schema: {
+            type: 'object',
+            properties: {
+              Position: { type: 'string', description: 'ชื่อตำแหน่งงาน' },
+              Branch:   { type: 'string', description: 'สาขา เช่น บางนา ลาดพร้าว สำนักงานใหญ่' },
+              Count:    { type: 'number', description: 'จำนวนอัตรา' },
+              Reporter: { type: 'string', description: 'ชื่อ Recruiter ที่รับผิดชอบ' },
+              Status:   { type: 'string', description: 'สถานะ: Open, Hold, Close' },
+              OpenDate: { type: 'string', description: 'วันที่เปิดรับ format YYYY-MM-DD' },
+            },
+            required: ['Position', 'Branch']
+          }
+        }]
       })
     });
 
     const data = await res.json();
-    const reply = data.content?.[0]?.text || 'ขออภัยครับ ไม่สามารถรับคำตอบได้';
 
-    removeTyping(typingId);
-    appendMsg('bot', reply);
-    chatHistory.push({ role: 'assistant', content: reply });
+    const toolUse = data.content?.find(c => c.type === 'tool_use');
+
+    if (toolUse && toolUse.name === 'add_vacancy') {
+      removeTyping(typingId);
+
+      appendMsg('bot', `⏳ กำลังเพิ่มตำแหน่ง **${toolUse.input.Position}** สาขา ${toolUse.input.Branch}...`);
+
+      const today = new Date().toISOString().split('T')[0];
+      const payload = {
+        id: null,
+        Position: toolUse.input.Position,
+        Branch: toolUse.input.Branch,
+        Count: toolUse.input.Count || 1,
+        Reporter: toolUse.input.Reporter || '',
+        Status: toolUse.input.Status || 'Open',
+        OpenDate: toolUse.input.OpenDate || today,
+      };
+
+      await fetch(CONFIG.POST_VACANCY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      await loadVacancies();
+      appendMsg('bot', `✅ เพิ่มตำแหน่ง **${toolUse.input.Position}** สาขา ${toolUse.input.Branch} เรียบร้อยแล้วครับ`);
+      chatHistory.push({ role: 'assistant', content: data.content });
+
+    } else {
+      const reply = data.content?.find(c => c.type === 'text')?.text || 'ขออภัยครับ ไม่สามารถรับคำตอบได้';
+      removeTyping(typingId);
+      appendMsg('bot', reply);
+      chatHistory.push({ role: 'assistant', content: reply });
+    }
 
   } catch (e) {
-    console.error('Chat error:', e);
-    console.error('Error details:', e.message, e.stack);
     removeTyping(typingId);
     appendMsg('bot', 'Error: ' + e.message);
     chatHistory.pop();
