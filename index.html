@@ -437,10 +437,6 @@ tbody tr:hover{background:#F8F7FF}
           </select>
           <select id="filter-branch" onchange="applyFilter()">
             <option value="">ทุกสาขา</option>
-            <option>สำนักงานใหญ่</option>
-            <option>ลาดกระบัง</option>
-            <option>บางนา</option>
-            <option>รังสิต</option>
           </select>
           <input type="text" id="filter-search" placeholder="🔍 ค้นหาตำแหน่ง..." oninput="applyFilter()">
         </div>
@@ -561,17 +557,15 @@ tbody tr:hover{background:#F8F7FF}
       <input type="hidden" id="v-id">
       <div class="form-group">
         <label class="form-label">ชื่อตำแหน่งงาน <span class="req">*</span></label>
-        <input class="form-control" id="v-title" type="text" placeholder="เช่น Store Manager">
+        <select class="form-control" id="v-title">
+          <option value="">-- เลือกตำแหน่ง --</option>
+        </select>
       </div>
       <div class="form-grid">
         <div class="form-group">
           <label class="form-label">สาขา <span class="req">*</span></label>
           <select class="form-control" id="v-branch">
             <option value="">-- เลือกสาขา --</option>
-            <option>สำนักงานใหญ่</option>
-            <option>ลาดกระบัง</option>
-            <option>บางนา</option>
-            <option>รังสิต</option>
           </select>
         </div>
         <div class="form-group">
@@ -684,6 +678,56 @@ const CONFIG = {
   PROXY_URL: 'https://hr-pro-claude-proxy.oonllos.workers.dev',
 };
 
+// ===================== MASTER DATA =====================
+const POSITIONS = [
+  "ASGM","Sales Manager","Section Manager - B2B Sales","Section Manager - Bakery",
+  "Section Manager - Butchery","Manager - Key Account","Section Mgr.-Customer Service",
+  "Section Manager - Frozen","Section Manager - Dry Food 1","Section Manager - Dry Food 2",
+  "Assistant Food Shop Manager","Section Manager - Frozen Shop","Section Manager - F&V",
+  "Section Manager - GA","Section Manager - GR","Section Manager - Non Food 1",
+  "Section Manager - Non Fresh","Section Manager - O2O Delivery","Section Manager-O2O Operation",
+  "Order Fulfillment Manager","Section Manager - Store OCS","Section Mgr.-Order Fulfillment",
+  "Section Manager - Fish","Section Manager - Store System","Section Manager-Human Resource",
+];
+
+const BRANCHES = [
+  "สาขาลาดพร้าว","สาขาแจ้งวัฒนะ","สาขาศรีนครินทร์","สาขาบางบอน","สาขาชลบุรี",
+  "สาขาเชียงใหม่ 1","สาขานครราชสีมา","สาขารังสิต","สาขาหาดใหญ่","สาขาอุดรธานี",
+  "สาขาพิษณุโลก","สาขาขอนแก่น","สาขาสุราษฏร์ธานี","สาขาอุบลราชธานี","สาขาระยอง",
+  "สาขานครสวรรค์","สาขาจรัญสนิทวงศ์","สาขาสาทร","สาขานครปฐม","สาขาสุรินทร์",
+  "สาขาสามเสน","สาขานครศรีธรรมราช","สาขาเชียงราย","สาขาสกลนคร","สาขาสุพรรณบุรี",
+  "สาขาจันทบุรี","สาขาภูเก็ต","สาขาร้อยเอ็ด","สาขาตรัง","สาขาสระแก้ว",
+  "สาขาเกาะสมุย","สาขาบุรีรัมย์","สาขาศรีสะเกษ","สาขาลำพูน","สาขากระบี่",
+  "สาขาเพชรบุรี","สาขาชัยภูมิ","สาขาสระบุรี","สาขาปราณบุรี","สาขาฉะเชิงเทรา",
+  "สาขาเชียงใหม่ 2","สาขารามอินทรา","สาขาชุมพร","สาขาพัทยา","สาขากำแพงเพชร",
+  "สาขากาญจนบุรี","สาขาลพบุรี","สาขาหนองคาย","สาขาราชบุรี","สาขาแม่ริม",
+  "สาขาอยุธยา","สาขาลำปาง","สาขาหัวหิน","สาขาคลองหลวง","สาขาเลย",
+  "สาขาเพชรบูรณ์","สาขาบางพลี","สาขามุกดาหาร","สาขาสตูล","สาขาตราด",
+  "สาขาชุมแพ","สาขาราไวย์","สาขานครพนม","สาขาเกาะพะงัน","สาขาบึงกาฬ",
+  "สาขาพัทยาเหนือ","สาขาแม่สาย","สาขาศาลายา","สาขาพัทลุง","สาขาสุโขทัย",
+  "สาขาป่าตอง","สาขาสมุทรสาคร","สาขาแม่สอด","สาขาปากช่อง","สาขาถลาง",
+  "สาขาระนอง","สาขาละไม","สาขากัลปพฤกษ์","สาขายโสธร","สาขามหาสารคาม",
+  "สาขาฝาง","สาขานครนายก","สาขานครอินทร์","สาขาบ้านเพ","สาขาทุ่งสง",
+  "สาขาศรีนครินทร์ 2","สาขาพะเยา","สาขาพิษณุโลก 2","Food Shop ทาวน์ อิน ทาวน์",
+  "สาขาแพร่","สาขาเกาะช้าง","สาขานครราชสีมา 2","สาขาน่าน","สาขาอ่าวนาง",
+  "สาขากะรน","สาขาวารินชำราบ","สาขาหนองบัวลำภู","สาขาหนองจอก","สาขาแหลมฉบัง",
+  "สาขาประจวบคีรีขันธ์","สาขาเพชรเกษม","สาขาวังหิน","สาขาสิงห์บุรี","สาขาบางบัวทอง",
+  "สาขากาฬสินธุ์","สาขาอุดมสุข","สาขารามคำแหง (สัมมากร)","สาขาพิจิตร","สาขาปทุมธานี",
+  "สาขาบดินทรเดชา","สาขาประชาอุทิศ","สาขาสุขุมวิท 71","สาขานวมินทร์ 70","สาขาชะอำ",
+  "สาขาอ่อนนุช","สาขาสุขสวัสดิ์","สาขากบินทร์บุรี","สาขาลาดกระบัง","สาขานาทองเจริญ",
+  "สาขาบ่อวิน","สาขาสัตหีบ","สาขารามคำแหง 24","สาขาอมตะนคร","สาขาบางคอแหลม",
+  "สาขาขอนแก่น 2","สาขาตลาดวงศกร 2","สาขาเหม่งจ๋าย","สาขาสุขุมวิท 22","สาขาถนนจันทน์",
+  "สาขาลำลูกกา","สาขาแพรกษา","สาขาประดิษฐ์มนูธรรม","สาขาตลาดรุ่งโรจน์","สาขาพงษ์เพชร",
+  "สาขาอุตรดิตถ์","สาขาเมืองทอง","สาขาเลียบคลองสอง","สาขาอ้อมน้อย","สาขาสนามบินน้ำ",
+  "สาขาเทพรักษ์","สาขาสมุทรสงคราม","สาขาเวียงสระ","สาขาปราจีนบุรี","สาขาปิ่นเกล้า",
+  "สาขาสมุทรปราการ","สาขาตลาดเซฟวัน","สาขาพรหมนิมิต","สาขาอุดรธานี 2 (บ้านเลื่อม)",
+  "สาขามหาชัย","สาขาขอนแก่น 3 (บ้านโนนม่วง)","สาขาอมตะนคร 2","สาขาสงขลา 2",
+  "สาขาชัยนาท","สาขาถนนศรีอยุธยา","สาขาราไวย์ 2","สาขาจอมทอง","สาขาบ้านบึง",
+  "สาขาพังงา (ตะกั่วป่า)","สาขาอำนาจเจริญ","สาขาจอหอ (นครราชสีมา)","สาขาบ้านไผ่",
+  "Food Shop พระราม 4","Food Shop ศิริมังคลาจารย์","Fresh Shop รามอินทรา กม 4",
+  "Fresh Shop ชิโนปาร์ค","Fresh Shop พัฒนาการ",
+];
+
 // ===================== STATE =====================
 let vacancies = [];
 let candidates = [];
@@ -705,7 +749,45 @@ const MOCK_CANDIDATES = [
 ];
 
 // ===================== INIT =====================
+function populateDropdowns() {
+  const titleSel = document.getElementById('v-title');
+  if (titleSel) {
+    titleSel.innerHTML = '<option value="">-- เลือกตำแหน่ง --</option>' +
+      POSITIONS.map(p => `<option value="${p}">${p}</option>`).join('');
+  }
+  ['v-branch', 'filter-branch'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const first = sel.options[0].outerHTML;
+    sel.innerHTML = first + BRANCHES.map(b => `<option value="${b}">${b}</option>`).join('');
+  });
+}
+
+function makeSearchableSelect(selectId, labelText) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = 'position:relative';
+  sel.parentNode.insertBefore(wrapper, sel);
+  wrapper.appendChild(sel);
+  const search = document.createElement('input');
+  search.type = 'text';
+  search.placeholder = `🔍 ค้นหา${labelText}...`;
+  search.className = 'form-control';
+  search.style.cssText = 'margin-bottom:4px;font-size:12px';
+  wrapper.insertBefore(search, sel);
+  search.addEventListener('input', () => {
+    const q = search.value.toLowerCase();
+    Array.from(sel.options).forEach(opt => {
+      opt.style.display = (!opt.value || opt.text.toLowerCase().includes(q)) ? '' : 'none';
+    });
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  populateDropdowns();
+  makeSearchableSelect('v-branch', 'สาขา');
+  makeSearchableSelect('v-title', 'ตำแหน่ง');
   loadVacancies();
   loadCandidates();
 });
