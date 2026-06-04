@@ -1112,6 +1112,9 @@ function buildSystemPrompt() {
     `- ${c.Title||c.FullName} | ตำแหน่ง: ${c.VacancyTitle||'-'} | สถานะ: ${c.CandidateStatus||'-'}`
   ).join('\n');
 
+  const positionList = POSITIONS.join('\n- ');
+  const branchList = BRANCHES.join(', ');
+
   return `คุณคือ HR Pro Agent ผู้ช่วย HR ของ Siam Makro Group
 ตอบเป็นภาษาไทยเสมอ กระชับ ชัดเจน และเป็นมืออาชีพ
 
@@ -1123,11 +1126,29 @@ ${vacancyList || 'ไม่มีข้อมูล'}
 👤 ผู้สมัคร (${candidates.length} คน):
 ${candidateList || 'ไม่มีข้อมูล'}
 
-คุณสามารถ:
-- สรุปและวิเคราะห์ข้อมูลตำแหน่งงานและผู้สมัครได้
-- แนะนำการดำเนินงาน HR ได้
-- ช่วยสร้างรายงานได้
-- แต่ไม่สามารถแก้ไขข้อมูลในระบบได้โดยตรง (ให้แนะนำให้ User กดปุ่มในหน้าเว็บแทน)`;
+⚠️ กฎสำคัญ — ชื่อตำแหน่งและสาขา:
+ห้ามใช้ชื่อย่อหรือคิดชื่อเอง ต้องใช้ชื่อจาก list นี้เท่านั้น
+ถ้า user พิมพ์ชื่อย่อ ให้ match กับชื่อเต็มใน list เช่น:
+- "HR" → "Section Manager-Human Resource"
+- "FM" → "Fresh Manager"
+- "SM-CS" → "Section Manager - Customer Service"
+- "GA" หรือ "SM-GA" → "Section Manager - GA"
+- "ASGM" → "ASGM"
+
+📌 ตำแหน่งงานที่ใช้ได้ (ใช้ชื่อเหล่านี้เท่านั้น):
+- ${positionList}
+
+🏢 สาขาที่ใช้ได้ (ใช้ชื่อเหล่านี้เท่านั้น):
+${branchList}
+
+🛠️ เครื่องมือที่คุณใช้ได้:
+- add_vacancy: ใช้เมื่อ user ต้องการเพิ่มตำแหน่งงานใหม่
+
+📌 กฎการใช้ add_vacancy:
+เรียกใช้ทันทีเมื่อ user พูดถึงการ "เพิ่ม", "เปิดรับ", "ต้องการ", "ขาด" ตำแหน่งใดก็ตาม
+ต้อง match ชื่อตำแหน่งและสาขากับ list ด้านบนให้ตรงที่สุดก่อนเรียก tool เสมอ
+หากข้อมูลไม่ครบ ให้ใช้ค่า default: Count=1, Status=Open, OpenDate=วันนี้, Reporter=""
+ห้ามถามข้อมูลเพิ่มเติมก่อนเรียก tool — เรียกทันทีแล้วแจ้ง user ว่าเพิ่มสำเร็จ`;
 }
 
 async function sendChat(text) {
