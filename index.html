@@ -721,6 +721,10 @@ async function loadVacancies() {
       vacancies = data.value || [];
       console.log('Column names:', Object.keys(vacancies[0] || {}));
       console.log('First item:', vacancies[0]);
+      if(vacancies.length > 0) {
+        console.log('RAW ITEM 1:', JSON.stringify(vacancies[0], null, 2));
+        console.log('RAW ITEM 2:', JSON.stringify(vacancies[1], null, 2));
+      }
     } else {
       vacancies = MOCK_VACANCIES;
     }
