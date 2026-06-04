@@ -1017,6 +1017,33 @@ const chatReplies = {
 
 let chatHistory = [];
 
+function buildSystemPrompt() {
+  const vacancyList = vacancies.map(v =>
+    `- ${v.Position||v.Title} | สาขา: ${v.Branch} | สถานะ: ${getVStatus(v)} | อัตรา: ${v.Count||v.Slots||1} | Recruiter: ${v.Reporter||v.Recruiter||'-'}`
+  ).join('\n');
+
+  const candidateList = candidates.map(c =>
+    `- ${c.Title||c.FullName} | ตำแหน่ง: ${c.VacancyTitle||'-'} | สถานะ: ${c.CandidateStatus||'-'}`
+  ).join('\n');
+
+  return `คุณคือ HR Pro Agent ผู้ช่วย HR ของ Siam Makro Group
+ตอบเป็นภาษาไทยเสมอ กระชับ ชัดเจน และเป็นมืออาชีพ
+
+ข้อมูลปัจจุบันในระบบ (อัปเดต Real-time):
+
+📋 ตำแหน่งงานว่าง (${vacancies.length} ตำแหน่ง):
+${vacancyList || 'ไม่มีข้อมูล'}
+
+👤 ผู้สมัคร (${candidates.length} คน):
+${candidateList || 'ไม่มีข้อมูล'}
+
+คุณสามารถ:
+- สรุปและวิเคราะห์ข้อมูลตำแหน่งงานและผู้สมัครได้
+- แนะนำการดำเนินงาน HR ได้
+- ช่วยสร้างรายงานได้
+- แต่ไม่สามารถแก้ไขข้อมูลในระบบได้โดยตรง (ให้แนะนำให้ User กดปุ่มในหน้าเว็บแทน)`;
+}
+
 async function sendChat(text) {
   const input = document.getElementById('chat-input');
   const msg = text || input.value.trim();
@@ -1035,7 +1062,7 @@ async function sendChat(text) {
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 1000,
-        system: 'คุณคือ HR Pro Agent ผู้ช่วย HR ของ Siam Makro Group ตอบเป็นภาษาไทยเสมอ กระชับ ชัดเจน และเป็นมืออาชีพ',
+        system: buildSystemPrompt(),
         messages: chatHistory
       })
     });
