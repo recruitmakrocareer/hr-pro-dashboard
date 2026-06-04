@@ -470,7 +470,7 @@ tbody tr:hover{background:#F8F7FF}
           <div class="chat-ai-icon">🤖</div>
           <div>
             <div class="chat-title">HR Pro Agent</div>
-            <div class="chat-subtitle">Powered by Copilot Studio</div>
+            <div class="chat-subtitle">Powered by Claude AI</div>
           </div>
         </div>
       </div>
@@ -680,6 +680,7 @@ const CONFIG = {
   GET_CANDIDATES_URL: '',  // Flow: GET Candidates List
   POST_CANDIDATE_URL: '',  // Flow: POST New Candidate
   COPILOT_IFRAME_URL: '',  // Copilot Studio embed URL
+  CHAT_URL: 'https://4d5e96e05cb6e591aefe0bce82117f.8e.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/054a7ae22780428199db88bcdba33491/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=YC23V2ULCPtOFQTlZBujqVaRmFZ9e5PTr4u-p59sW5I',
 };
 
 // ===================== STATE =====================
@@ -1009,38 +1010,73 @@ const chatReplies = {
   'รายงาน':'กำลังสร้างรายงานประจำสัปดาห์ครับ... พบว่ามีตำแหน่งเปิดรับ {{open}} อัตรา ผู้สมัครรวม {{candidates}} คน',
 };
 
-function sendChat(text) {
+let chatHistory = [];
+
+async function sendChat(text) {
   const input = document.getElementById('chat-input');
   const msg = text || input.value.trim();
   if (!msg) return;
-  if (input) input.value='';
-  addMessage(msg,'user');
-  const box = document.getElementById('chat-messages');
-  const typing = document.createElement('div');
-  typing.className='msg bot';
-  typing.innerHTML='<div class="ai-typing"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>';
-  box.appendChild(typing);
-  box.scrollTop=box.scrollHeight;
-  setTimeout(()=>{
-    box.removeChild(typing);
-    const key = Object.keys(chatReplies).find(k=>msg.includes(k.slice(0,4)));
-    let reply = key ? chatReplies[key] : `รับทราบครับ! "${msg}" — กำลังดำเนินการให้ครับ 🤖`;
-    reply = reply.replace('{{open}}',vacancies.filter(v=>v.Status==='Open').length)
-                 .replace('{{total}}',vacancies.length)
-                 .replace('{{candidates}}',candidates.length);
-    addMessage(reply,'bot');
-  },1200);
+  input.value = '';
+
+  appendMsg('user', msg);
+  chatHistory.push({ role: 'user', content: msg });
+
+  const typingId = showTyping();
+
+  try {
+    const res = await fetch(CONFIG.CHAT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system: 'คุณคือ HR Pro Agent ผู้ช่วย HR ของ Siam Makro Group ตอบเป็นภาษาไทยเสมอ กระชับ ชัดเจน และเป็นมืออาชีพ',
+        messages: chatHistory
+      })
+    });
+
+    const data = await res.json();
+    const reply = data.reply || 'ขออภัยครับ ไม่สามารถรับคำตอบได้';
+
+    removeTyping(typingId);
+    appendMsg('bot', reply);
+    chatHistory.push({ role: 'assistant', content: reply });
+
+  } catch (e) {
+    removeTyping(typingId);
+    appendMsg('bot', 'ขออภัยครับ ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง');
+  }
 }
 
-function addMessage(text,type) {
-  const box = document.getElementById('chat-messages');
-  const now = new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+function appendMsg(role, text) {
+  const container = document.getElementById('chat-messages');
+  const time = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
   const div = document.createElement('div');
-  div.className=`msg ${type}`;
-  div.innerHTML=`<div class="msg-bubble">${text}</div><div class="msg-time">${now}</div>`;
-  box.appendChild(div);
-  box.scrollTop=box.scrollHeight;
+  div.className = `msg ${role}`;
+  div.innerHTML = `
+    <div class="msg-bubble">${text.replace(/\n/g, '<br>')}</div>
+    <div class="msg-time">${time}</div>
+  `;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
 }
+
+function showTyping() {
+  const container = document.getElementById('chat-messages');
+  const id = 'typing-' + Date.now();
+  const div = document.createElement('div');
+  div.className = 'msg bot';
+  div.id = id;
+  div.innerHTML = `<div class="ai-typing"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  return id;
+}
+
+function removeTyping(id) {
+  const el = document.getElementById(id);
+  if (el) el.remove();
+}
+
+function addMessage(text, type) { appendMsg(type, text); }
 
 // ===================== MODAL HELPERS =====================
 function openModal(id){document.getElementById(id).classList.add('show')}
@@ -1082,7 +1118,7 @@ function showToast(msg) {
   <div class="chat-panel" style="height:calc(100vh - 140px)">
     <div class="chat-header">
       <div class="chat-ai-icon">🤖</div>
-      <div><div class="chat-title">HR Pro Agent</div><div class="chat-subtitle">Powered by Copilot Studio</div></div>
+      <div><div class="chat-title">HR Pro Agent</div><div class="chat-subtitle">Powered by Claude AI</div></div>
     </div>
     <div class="chat-messages" id="chat-messages-mobile">
       <div class="msg bot"><div class="msg-bubble">สวัสดีครับ! ผม HR Pro พร้อมช่วยงานครับ 👋</div></div>
@@ -1115,23 +1151,42 @@ function showPage(name,btn,nav){
   if(btn)btn.classList.add('active');
 }
 
-function sendChatMobile(text){
+let chatHistoryMobile = [];
+
+async function sendChatMobile(text){
   const input=document.getElementById('chat-input-mobile');
   const msg=text||(input?input.value.trim():'');
   if(!msg)return;
   if(input)input.value='';
   addMobileMsg(msg,'user');
+  chatHistoryMobile.push({role:'user',content:msg});
+
   const box=document.getElementById('chat-messages-mobile');
+  const typingId='typing-mob-'+Date.now();
   const typing=document.createElement('div');
   typing.className='msg bot';
+  typing.id=typingId;
   typing.innerHTML='<div class="ai-typing"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>';
   box.appendChild(typing);box.scrollTop=box.scrollHeight;
-  setTimeout(()=>{
-    box.removeChild(typing);
-    const chatReplies={'สรุปตำแหน่ง':'เปิดรับอยู่ '+vacancies.filter(v=>v.Status==="Open").length+' อัตราครับ','ผู้สมัครใหม่':'ผู้สมัครรวม '+candidates.length+' คนในระบบครับ','สาขา':'สาขาที่ขาดคนมากคือสำนักงานใหญ่ครับ'};
-    const key=Object.keys(chatReplies).find(k=>msg.includes(k.slice(0,4)));
-    addMobileMsg(key?chatReplies[key]:'รับทราบครับ! กำลังดำเนินการ 🤖','bot');
-  },1200);
+
+  try {
+    const res=await fetch(CONFIG.CHAT_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        system:'คุณคือ HR Pro Agent ผู้ช่วย HR ของ Siam Makro Group ตอบเป็นภาษาไทยเสมอ กระชับ ชัดเจน และเป็นมืออาชีพ',
+        messages:chatHistoryMobile
+      })
+    });
+    const data=await res.json();
+    const reply=data.reply||'ขออภัยครับ ไม่สามารถรับคำตอบได้';
+    document.getElementById(typingId)?.remove();
+    addMobileMsg(reply,'bot');
+    chatHistoryMobile.push({role:'assistant',content:reply});
+  } catch(e){
+    document.getElementById(typingId)?.remove();
+    addMobileMsg('ขออภัยครับ ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง','bot');
+  }
 }
 
 function addMobileMsg(text,type){
@@ -1140,7 +1195,7 @@ function addMobileMsg(text,type){
   const now=new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
   const d=document.createElement('div');
   d.className='msg '+type;
-  d.innerHTML='<div class="msg-bubble">'+text+'</div><div class="msg-time">'+now+'</div>';
+  d.innerHTML='<div class="msg-bubble">'+text.replace(/\n/g,'<br>')+'</div><div class="msg-time">'+now+'</div>';
   box.appendChild(d);box.scrollTop=box.scrollHeight;
 }
 </script>
