@@ -612,11 +612,12 @@ tbody tr:hover{background:#F8F7FF}
     </div>
     <div class="modal-body">
       <!-- Upload Zone -->
-      <div class="upload-zone" id="upload-zone" onclick="simulateAIExtract()">
+      <div class="upload-zone" id="upload-zone" onclick="document.getElementById('cv-file').click()">
         <div class="upload-icon">📄</div>
         <div class="upload-title" id="upload-title">อัปโหลด CV (PDF / DOCX)</div>
-        <div class="upload-sub">AI จะอ่าน CV และกรอกข้อมูลให้อัตโนมัติ</div>
+        <div class="upload-sub">AI จะอ่านและกรอกข้อมูลให้อัตโนมัติ (เฉพาะ PDF, ไม่เกิน 5 MB)</div>
       </div>
+      <input type="file" id="cv-file" accept=".pdf,.docx" style="display:none" onchange="handleCVUpload(this.files[0])">
       <div id="ai-alert" style="display:none;margin-top:12px"></div>
       <div style="height:14px"></div>
       <div class="form-grid">
@@ -1042,28 +1043,114 @@ function openCandidateModal() {
   document.getElementById('upload-title').textContent='อัปโหลด CV (PDF / DOCX)';
   document.getElementById('ai-alert').style.display='none';
   document.getElementById('upload-zone').style.background='';
+  document.getElementById('upload-zone').style.borderColor='';
+  resetCVUpload();
   openModal('candidate-modal');
 }
 
-function simulateAIExtract() {
-  const title = document.getElementById('upload-title');
+// ===================== CV UPLOAD + AI EXTRACT =====================
+let cvFileName = null;
+let cvFileBase64 = null;
+
+function resetCVUpload() {
+  cvFileName = null;
+  cvFileBase64 = null;
+  const fileInput = document.getElementById('cv-file');
+  if (fileInput) fileInput.value = '';
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleCVUpload(file) {
+  if (!file) return;
+  const alertBox = document.getElementById('ai-alert');
+  if (file.size > 5 * 1024 * 1024) {
+    alertBox.style.display = 'flex';
+    alertBox.className = 'alert alert-info';
+    alertBox.innerHTML = '⚠️ ไฟล์ใหญ่เกิน 5 MB กรุณาเลือกไฟล์ใหม่';
+    resetCVUpload();
+    return;
+  }
+  // ใส่ timestamp นำหน้าและตัดอักขระต้องห้ามของ SharePoint กันชื่อไฟล์ชน
+  const ts = new Date().toISOString().replace(/[-:]/g, '').replace('T', '_').slice(0, 15);
+  cvFileName = `${ts}_${file.name.replace(/[~"#%&*:<>?/\\{|}]/g, '_')}`;
+  cvFileBase64 = await fileToBase64(file);
+
   const zone = document.getElementById('upload-zone');
-  const alert = document.getElementById('ai-alert');
-  title.textContent='🔄 AI กำลังอ่านและวิเคราะห์ CV...';
-  zone.style.background='#F0FDF9';
-  zone.style.borderColor='var(--accent)';
-  setTimeout(()=>{
-    // จำลองผล Extract (ในของจริงจะมาจาก Power Automate + AI Builder)
-    const mockData = {first:'สมชาย',last:'ใจดี',email:'somchai.j@gmail.com',phone:'081-234-5678'};
-    ['first','last','email','phone'].forEach(k=>{
-      const el=document.getElementById(`c-${k}`);
-      if(el){el.value=mockData[k];el.classList.add('ai-filled');}
+  zone.style.background = '#F0FDF9';
+  zone.style.borderColor = 'var(--accent)';
+  document.getElementById('upload-title').textContent = `📎 ${file.name}`;
+
+  if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+    await extractCVWithAI(cvFileBase64);
+  } else {
+    alertBox.style.display = 'flex';
+    alertBox.className = 'alert alert-info';
+    alertBox.innerHTML = 'ℹ️ แนบไฟล์เรียบร้อย — AI อ่านอัตโนมัติได้เฉพาะ PDF กรุณากรอกข้อมูลเอง';
+  }
+}
+
+async function extractCVWithAI(base64) {
+  const title = document.getElementById('upload-title');
+  const alertBox = document.getElementById('ai-alert');
+  title.textContent = '🔄 AI กำลังอ่านและวิเคราะห์ CV...';
+  alertBox.style.display = 'none';
+  try {
+    const res = await fetch(CONFIG.PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 500,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
+            { type: 'text', text: 'ดึงข้อมูลผู้สมัครจาก Resume นี้' }
+          ]
+        }],
+        tools: [{
+          name: 'extract_candidate',
+          description: 'บันทึกข้อมูลผู้สมัครที่อ่านได้จาก Resume',
+          input_schema: {
+            type: 'object',
+            properties: {
+              first: { type: 'string', description: 'ชื่อจริง (ไม่รวมนามสกุล ไม่รวมคำนำหน้า)' },
+              last:  { type: 'string', description: 'นามสกุล' },
+              email: { type: 'string' },
+              phone: { type: 'string', description: 'เบอร์โทรรูปแบบ 0XX-XXX-XXXX' },
+            },
+            required: ['first', 'last']
+          }
+        }],
+        tool_choice: { type: 'tool', name: 'extract_candidate' }
+      })
     });
-    title.textContent='✅ AI กรอกข้อมูลเรียบร้อยแล้ว';
-    alert.style.display='flex';
-    alert.className='alert alert-success';
-    alert.innerHTML='✨ AI อ่าน CV สำเร็จ — กรุณาตรวจสอบและแก้ไขก่อนบันทึก';
-  },1800);
+    const data = await res.json();
+    const toolUse = data.content?.find(c => c.type === 'tool_use');
+    if (!toolUse) throw new Error(data.error?.message || 'no tool_use in response');
+    ['first', 'last', 'email', 'phone'].forEach(k => {
+      const el = document.getElementById(`c-${k}`);
+      if (el && toolUse.input[k]) { el.value = toolUse.input[k]; el.classList.add('ai-filled'); }
+    });
+    title.textContent = '✅ AI กรอกข้อมูลเรียบร้อยแล้ว';
+    alertBox.style.display = 'flex';
+    alertBox.className = 'alert alert-success';
+    alertBox.innerHTML = '✨ AI อ่าน CV สำเร็จ — กรุณาตรวจสอบและแก้ไขก่อนบันทึก';
+  } catch (e) {
+    console.error('extractCVWithAI error:', e);
+    title.textContent = '📎 แนบไฟล์แล้ว (AI อ่านไม่สำเร็จ)';
+    alertBox.style.display = 'flex';
+    alertBox.className = 'alert alert-info';
+    alertBox.innerHTML = 'ℹ️ AI อ่าน CV ไม่สำเร็จ — ไฟล์ยังแนบอยู่ กรุณากรอกข้อมูลเอง';
+  }
 }
 
 async function saveCandidate() {
@@ -1079,6 +1166,8 @@ async function saveCandidate() {
     VacancyID: vacancyId,
     VacancyTitle: vac?getVTitle(vac):'',
     CandidateStatus: document.getElementById('c-status').value,
+    FileName: cvFileBase64 ? cvFileName : null,
+    FileContent: cvFileBase64,
   };
   try {
     if (CONFIG.POST_CANDIDATE_URL) {
