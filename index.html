@@ -879,7 +879,8 @@ function updateKPI() {
 
 // ===================== RENDER VACANCIES =====================
 function renderVacancies(data) {
-  const rows = data || vacancies;
+  // เรียงใหม่ล่าสุดขึ้นบนสุด (ID จาก SharePoint รันเพิ่มตามลำดับการสร้าง)
+  const rows = [...(data || vacancies)].sort((a,b)=>(b.ID||b.id||0)-(a.ID||a.id||0));
   const tbodies = ['vacancy-tbody','vacancy-tbody-2'];
   tbodies.forEach(id => {
     const tb = document.getElementById(id);
