@@ -1037,7 +1037,7 @@ function openCandidateModal() {
   });
   document.getElementById('c-status').value='New';
   document.getElementById('c-vacancy').innerHTML='<option value="">-- เลือกตำแหน่ง --</option>'+
-    vacancies.filter(v=>v.Status==='Open').map(v=>`<option value="${v.id||v.ID}">${v.Title} — ${v.Branch}</option>`).join('');
+    vacancies.filter(v=>getVStatus(v)==='Open').map(v=>`<option value="${v.id||v.ID}">${getVTitle(v)} — ${v.Branch||'-'}</option>`).join('');
   document.getElementById('upload-title').textContent='อัปโหลด CV (PDF / DOCX)';
   document.getElementById('ai-alert').style.display='none';
   document.getElementById('upload-zone').style.background='';
@@ -1076,7 +1076,7 @@ async function saveCandidate() {
     Email: document.getElementById('c-email').value,
     Phone: document.getElementById('c-phone').value,
     VacancyID: vacancyId,
-    VacancyTitle: vac?vac.Title:'',
+    VacancyTitle: vac?getVTitle(vac):'',
     CandidateStatus: document.getElementById('c-status').value,
   };
   try {
@@ -1152,14 +1152,18 @@ ${candidateList || 'ไม่มีข้อมูล'}
 }
 
 async function sendChat(text) {
-  const input = document.getElementById('chat-input');
+  return sendChatCore(text, 'chat-input', 'chat-messages');
+}
+
+async function sendChatCore(text, inputId, containerId) {
+  const input = document.getElementById(inputId);
   const msg = text || input.value.trim();
   if (!msg) return;
   input.value = '';
 
-  appendMsg('user', msg);
+  appendMsg('user', msg, containerId);
   chatHistory.push({ role: 'user', content: msg });
-  const typingId = showTyping();
+  const typingId = showTyping(containerId);
 
   try {
     const res = await fetch(CONFIG.PROXY_URL, {
@@ -1224,7 +1228,7 @@ async function sendChat(text) {
     if (toolUse && toolUse.name === 'add_vacancy') {
       removeTyping(typingId);
 
-      appendMsg('bot', `⏳ กำลังเพิ่มตำแหน่ง **${toolUse.input.Position}** สาขา ${toolUse.input.Branch}...`);
+      appendMsg('bot', `⏳ กำลังเพิ่มตำแหน่ง **${toolUse.input.Position}** สาขา ${toolUse.input.Branch}...`, containerId);
 
       const today = new Date().toISOString().split('T')[0];
       const payload = {
@@ -1245,14 +1249,14 @@ async function sendChat(text) {
 
       await loadVacancies();
       const replyText1 = `✅ เพิ่มตำแหน่ง ${toolUse.input.Position} สาขา ${toolUse.input.Branch} เรียบร้อยแล้วครับ`;
-      appendMsg('bot', replyText1);
+      appendMsg('bot', replyText1, containerId);
       chatHistory.push({ role: 'assistant', content: replyText1 });
 
     } else if (toolUse && toolUse.name === 'add_vacancies') {
       removeTyping(typingId);
       const items = toolUse.input.vacancies || [];
       const today = new Date().toISOString().split('T')[0];
-      appendMsg('bot', `⏳ กำลังเพิ่ม ${items.length} ตำแหน่ง...`);
+      appendMsg('bot', `⏳ กำลังเพิ่ม ${items.length} ตำแหน่ง...`, containerId);
       for (const item of items) {
         await fetch(CONFIG.POST_VACANCY_URL, {
           method: 'POST',
@@ -1271,25 +1275,25 @@ async function sendChat(text) {
       await loadVacancies();
       const summary = items.map(i => `• ${i.Position} — ${i.Branch}`).join('\n');
       const replyText2 = `✅ เพิ่มครบ ${items.length} ตำแหน่งเรียบร้อยแล้วครับ\n\n${summary}`;
-      appendMsg('bot', replyText2);
+      appendMsg('bot', replyText2, containerId);
       chatHistory.push({ role: 'assistant', content: replyText2 });
 
     } else {
       const reply = data.content?.find(c => c.type === 'text')?.text || 'ขออภัยครับ ไม่สามารถรับคำตอบได้';
       removeTyping(typingId);
-      appendMsg('bot', reply);
+      appendMsg('bot', reply, containerId);
       chatHistory.push({ role: 'assistant', content: reply });
     }
 
   } catch (e) {
     removeTyping(typingId);
-    appendMsg('bot', 'Error: ' + e.message);
+    appendMsg('bot', 'Error: ' + e.message, containerId);
     chatHistory.pop();
   }
 }
 
-function appendMsg(role, text) {
-  const container = document.getElementById('chat-messages');
+function appendMsg(role, text, containerId = 'chat-messages') {
+  const container = document.getElementById(containerId);
   const time = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
   const div = document.createElement('div');
   div.className = `msg ${role}`;
@@ -1301,8 +1305,8 @@ function appendMsg(role, text) {
   container.scrollTop = container.scrollHeight;
 }
 
-function showTyping() {
-  const container = document.getElementById('chat-messages');
+function showTyping(containerId = 'chat-messages') {
+  const container = document.getElementById(containerId);
   const id = 'typing-' + Date.now();
   const div = document.createElement('div');
   div.className = 'msg bot';
@@ -1393,52 +1397,9 @@ function showPage(name,btn,nav){
   if(btn)btn.classList.add('active');
 }
 
-let chatHistoryMobile = [];
-
+// ใช้ logic เดียวกับ desktop (รวม system prompt + tools) แชร์ chatHistory เดียวกัน
 async function sendChatMobile(text){
-  const input=document.getElementById('chat-input-mobile');
-  const msg=text||(input?input.value.trim():'');
-  if(!msg)return;
-  if(input)input.value='';
-  addMobileMsg(msg,'user');
-  chatHistoryMobile.push({role:'user',content:msg});
-
-  const box=document.getElementById('chat-messages-mobile');
-  const typingId='typing-mob-'+Date.now();
-  const typing=document.createElement('div');
-  typing.className='msg bot';
-  typing.id=typingId;
-  typing.innerHTML='<div class="ai-typing"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>';
-  box.appendChild(typing);box.scrollTop=box.scrollHeight;
-
-  try {
-    const res=await fetch(CONFIG.PROXY_URL,{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        system:'คุณคือ HR Pro Agent ผู้ช่วย HR ของ Siam Makro Group ตอบเป็นภาษาไทยเสมอ กระชับ ชัดเจน และเป็นมืออาชีพ',
-        messages:chatHistoryMobile
-      })
-    });
-    const data=await res.json();
-    const reply=data.reply||'ขออภัยครับ ไม่สามารถรับคำตอบได้';
-    document.getElementById(typingId)?.remove();
-    addMobileMsg(reply,'bot');
-    chatHistoryMobile.push({role:'assistant',content:reply});
-  } catch(e){
-    document.getElementById(typingId)?.remove();
-    addMobileMsg('ขออภัยครับ ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง','bot');
-  }
-}
-
-function addMobileMsg(text,type){
-  const box=document.getElementById('chat-messages-mobile');
-  if(!box)return;
-  const now=new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
-  const d=document.createElement('div');
-  d.className='msg '+type;
-  d.innerHTML='<div class="msg-bubble">'+text.replace(/\n/g,'<br>')+'</div><div class="msg-time">'+now+'</div>';
-  box.appendChild(d);box.scrollTop=box.scrollHeight;
+  return sendChatCore(text, 'chat-input-mobile', 'chat-messages-mobile');
 }
 </script>
 </body>
