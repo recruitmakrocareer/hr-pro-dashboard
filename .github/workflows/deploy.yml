@@ -1,5 +1,6 @@
 name: Deploy to GitHub Pages
 
+# Deploy publishes index.html (with injected secrets) to GitHub Pages on every push to main.
 on:
   push:
     branches: [main]
