@@ -687,6 +687,14 @@ const CONFIG = {
 Object.keys(CONFIG).forEach(k => {
   if (typeof CONFIG[k] === 'string' && /^__[A-Z_]+__$/.test(CONFIG[k])) CONFIG[k] = '';
 });
+// log สถานะ URL ทุกครั้งที่โหลด (true=มีค่า, false=ว่าง) — ถ้า false แปลว่า secret ไม่ถูก inject -> เว็บจะตกไป MOCK
+console.log('[CONFIG] URLs present?', {
+  GET_VACANCIES_URL: !!CONFIG.GET_VACANCIES_URL,
+  POST_VACANCY_URL: !!CONFIG.POST_VACANCY_URL,
+  GET_CANDIDATES_URL: !!CONFIG.GET_CANDIDATES_URL,
+  POST_CANDIDATE_URL: !!CONFIG.POST_CANDIDATE_URL,
+  PROXY_URL: !!CONFIG.PROXY_URL,
+});
 
 // ===================== MASTER DATA =====================
 const POSITIONS = [
