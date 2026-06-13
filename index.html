@@ -953,6 +953,13 @@ function applyVacancyFilter() {
 }
 
 // ===================== RENDER CANDIDATES =====================
+// ดึง URL ของ CV — รองรับชื่อ field สำรอง และ SharePoint Hyperlink ที่คืนเป็น object {Url}
+function cvLinkOf(c) {
+  const raw = c.CVLink ?? c.CVUrl ?? c.CVURL ?? c.ResumeURL ?? c.ResumeUrl ?? c.CV ?? c.FileUrl ?? c.FileLink ?? '';
+  if (raw && typeof raw === 'object') return raw.Url || raw.url || '';
+  return raw || '';
+}
+
 function renderCandidates() {
   const grid = document.getElementById('candidate-grid');
   if (!candidates.length) {
@@ -962,6 +969,7 @@ function renderCandidates() {
   const statusColor = {New:'badge-hold',Screening:'badge-hold',Interview:'badge-open',Offer:'badge-open',Pass:'badge-open',Fail:'badge-close'};
   grid.innerHTML = candidates.map(c => {
     const initials = (c.Title||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    const cv = cvLinkOf(c);
     return `<div class="candidate-card">
       <div class="candidate-header">
         <div class="candidate-avatar">${initials}</div>
@@ -976,7 +984,7 @@ function renderCandidates() {
       </div>
       <div class="candidate-footer">
         <span class="badge ${statusColor[c.CandidateStatus]||'badge-hold'}">${c.CandidateStatus||'New'}</span>
-        ${c.CVLink?`<a class="cv-link" href="${c.CVLink}" target="_blank">📄 ดู CV</a>`:`<span style="font-size:12px;color:var(--text-3)">ยังไม่มี CV</span>`}
+        ${cv?`<a class="cv-link" href="${cv}" target="_blank">📄 ดู CV</a>`:`<span style="font-size:12px;color:var(--text-3)">ยังไม่มี CV</span>`}
       </div>
     </div>`;
   }).join('');
