@@ -856,7 +856,14 @@ async function loadCandidates() {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({})
       });
-      const data = await res.json();
+      const raw = await res.text();
+      if (!res.ok) {
+        // เลิก swallow error เงียบ ๆ — log สถานะ + body จริงจาก Flow เพื่อ diagnose (เช่น 400 จาก Power Automate)
+        console.error('[loadCandidates] Flow ตอบ error', res.status, '-', raw.slice(0, 400));
+        throw new Error(`GET candidates HTTP ${res.status}`);
+      }
+      let data = {};
+      try { data = JSON.parse(raw); } catch { /* not JSON */ }
       candidates = data.value || [];
       // diagnose: เช็คว่า GET_CANDIDATES_URL ชี้ผิดไปที่ Flow vacancies ไหม + ดู schema ที่ได้จริง
       console.log('[loadCandidates] sameUrlAsVacancies:', CONFIG.GET_CANDIDATES_URL === CONFIG.GET_VACANCIES_URL,
@@ -870,7 +877,9 @@ async function loadCandidates() {
     renderCandidates();
     updateKPI();
   } catch(e) {
-    candidates = MOCK_CANDIDATES;
+    // production: ถ้า Flow error อย่าโชว์ mock หลอกตา — แสดง list ว่างแทน (ดู console สำหรับสาเหตุ)
+    console.error('loadCandidates error:', e);
+    candidates = [];
     renderCandidates();
     updateKPI();
   }
