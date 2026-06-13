@@ -668,18 +668,25 @@ tbody tr:hover{background:#F8F7FF}
 
 <script>
 // ===================== CONFIG =====================
-// วาง URL ของ Power Automate Flow ตรงนี้หลัง Deploy
+// TD-01: URL ของ Power Automate Flow (มี sig= = ความลับ) ถูก inject ตอน deploy จาก GitHub Secrets
+// ดู .github/workflows/deploy.yml — ห้าม hardcode URL จริงในไฟล์นี้
+// ค่า placeholder __NAME__ ที่ยังไม่ถูกแทน (เช่นตอน dev/preview) จะถูกล้างเป็น '' → fallback ไป MOCK
 const CONFIG = {
-  GET_VACANCIES_URL:  'https://4d5e96e05cb6e591aefe0bce82117f.8e.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/7eced539609c4e658e10d8b4ca8a0c84/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=NnZW8Uu1Vq1P-CMNE4sN7gofQTfWe9VadtkB6t42zAk',
-  POST_VACANCY_URL:   'https://4d5e96e05cb6e591aefe0bce82117f.8e.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/49e89cc1a25a4775b146a8b1bdabb67a/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=vTna3wQzrAriHFEHuZMHDlqrVnQOKpkHglohjf4uEWc',  // Flow: POST New/Edit Vacancy
-  GET_CANDIDATES_URL: 'https://4d5e96e05cb6e591aefe0bce82117f.8e.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/6d922addd2cd45cc8467e008e0b21631/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=Y4vSOZ9qB4H4CKMKWatHthc4prdMwyrCaCGK2Pw29UI',  // Flow: GET Candidates List
+  GET_VACANCIES_URL:  '__GET_VACANCIES_URL__',
+  POST_VACANCY_URL:   '__POST_VACANCY_URL__',   // Flow: POST New/Edit Vacancy
+  GET_CANDIDATES_URL: '__GET_CANDIDATES_URL__',  // Flow: GET Candidates List
   // Flow: POST New Candidate — เขียนลง List `Candidates` โครงใหม่ (Title/Email/Phone/VacancyID/VacancyTitle/CandidateStatus/CVLink)
   // ตัดสินใจ 12/06/2026: หน้าเว็บอ่านโครงใหม่อยู่แล้ว จึงไม่แก้ Flow — คอลัมน์โครงเก่า (FirstName/LastName/ResumeURL ฯลฯ) ไม่ถูกใช้ ลบจาก List ได้
-  POST_CANDIDATE_URL: 'https://4d5e96e05cb6e591aefe0bce82117f.8e.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/682d87a24c9a4d6dba346f905d90f73a/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=qaesZFd8NKQ6QoftZbkFD-g8Dg_Su20SHYcZrfpa9Bk',
+  POST_CANDIDATE_URL: '__POST_CANDIDATE_URL__',
   COPILOT_IFRAME_URL: '',  // Copilot Studio embed URL
   CLAUDE_API_KEY: '__CLAUDE_API_KEY__',
   PROXY_URL: 'https://hr-pro-claude-proxy.oonllos.workers.dev',
 };
+
+// placeholder ที่ยังไม่ถูก inject (รูปแบบ __ABC__) ให้ถือว่าว่าง เพื่อไม่ให้ fetch URL ปลอม
+Object.keys(CONFIG).forEach(k => {
+  if (typeof CONFIG[k] === 'string' && /^__[A-Z_]+__$/.test(CONFIG[k])) CONFIG[k] = '';
+});
 
 // ===================== MASTER DATA =====================
 const POSITIONS = [
@@ -1179,14 +1186,21 @@ async function saveCandidate() {
     FileName: cvFileBase64 ? cvFileName : null,
     FileContent: cvFileBase64,
   };
+  // BUG diagnose: log payload แบบตัด base64 ออก (FileContent ยาวมาก) เพื่อให้เห็น field ที่ส่งจริงใน console
+  console.log('[saveCandidate] POST payload:', {...payload, FileContent: cvFileBase64 ? `<base64 ${cvFileBase64.length} chars>` : null});
   const saveBtn = document.getElementById('c-save');
   saveBtn.disabled = true;
   saveBtn.textContent = '⏳ กำลังบันทึก...';
   try {
     if (CONFIG.POST_CANDIDATE_URL) {
       const res = await fetch(CONFIG.POST_CANDIDATE_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-      const result = await res.json().catch(()=>({}));
-      if (!res.ok || result.status !== 'success') throw new Error(result.message || `HTTP ${res.status}`);
+      const raw = await res.text();
+      let result = {};
+      try { result = JSON.parse(raw); } catch { /* server ไม่ได้คืน JSON */ }
+      if (!res.ok || result.status !== 'success') {
+        console.error('[saveCandidate] server response:', res.status, raw);
+        throw new Error(result.message || `HTTP ${res.status} — ${raw.slice(0,200) || 'ไม่มีรายละเอียด'}`);
+      }
       await loadCandidates();
     } else {
       candidates.push({...payload,id:Date.now()});
@@ -1197,7 +1211,7 @@ async function saveCandidate() {
     showToast('เพิ่มผู้สมัครเรียบร้อยแล้ว');
   } catch(e) {
     console.error('saveCandidate error:', e);
-    alert('บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง (ข้อมูลในฟอร์มยังอยู่ครบ)');
+    alert('บันทึกไม่สำเร็จ: ' + (e.message || 'unknown') + '\n(ข้อมูลในฟอร์มยังอยู่ครบ — ดู Console สำหรับรายละเอียด)');
   } finally {
     saveBtn.disabled = false;
     saveBtn.textContent = '💾 บันทึก';

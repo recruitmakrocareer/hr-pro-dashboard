@@ -13,8 +13,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Inject API Key
-        run: sed -i "s|__CLAUDE_API_KEY__|${{ secrets.CLAUDE_API_KEY }}|g" index.html
+      - name: Inject secrets (API key + Power Automate URLs)
+        env:
+          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+          GET_VACANCIES_URL: ${{ secrets.GET_VACANCIES_URL }}
+          POST_VACANCY_URL: ${{ secrets.POST_VACANCY_URL }}
+          GET_CANDIDATES_URL: ${{ secrets.GET_CANDIDATES_URL }}
+          POST_CANDIDATE_URL: ${{ secrets.POST_CANDIDATE_URL }}
+        # ใช้ node แทน sed: แทนที่แบบ literal (split/join) — URL มี '&' ซึ่ง sed จะ treat เป็น match พังได้
+        run: |
+          node -e '
+            const fs = require("fs");
+            let h = fs.readFileSync("index.html", "utf8");
+            for (const k of ["CLAUDE_API_KEY","GET_VACANCIES_URL","POST_VACANCY_URL","GET_CANDIDATES_URL","POST_CANDIDATE_URL"]) {
+              h = h.split("__" + k + "__").join(process.env[k] || "");
+            }
+            fs.writeFileSync("index.html", h);
+          '
 
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
