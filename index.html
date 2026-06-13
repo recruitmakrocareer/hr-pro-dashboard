@@ -850,6 +850,12 @@ async function loadCandidates() {
       });
       const data = await res.json();
       candidates = data.value || [];
+      // diagnose: เช็คว่า GET_CANDIDATES_URL ชี้ผิดไปที่ Flow vacancies ไหม + ดู schema ที่ได้จริง
+      console.log('[loadCandidates] sameUrlAsVacancies:', CONFIG.GET_CANDIDATES_URL === CONFIG.GET_VACANCIES_URL,
+        '| got', candidates.length, 'items | first item keys:', Object.keys(candidates[0] || {}));
+      if (candidates[0] && ('Position' in candidates[0] || 'Path' in candidates[0])) {
+        console.warn('[loadCandidates] ⚠️ ได้ schema แบบ JobVacancy — GET_CANDIDATES_URL อาจชี้ผิด Flow (ตรวจ GitHub Secret)');
+      }
     } else {
       candidates = MOCK_CANDIDATES;
     }
