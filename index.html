@@ -1060,6 +1060,7 @@ function openCandidateModal() {
 // ===================== CV UPLOAD + AI EXTRACT =====================
 let cvFileName = null;
 let cvFileBase64 = null;
+let cvExtracting = false;   // true ระหว่าง AI อ่าน CV — กันกด "บันทึก" ก่อนฟิลด์ถูกกรอก (timing guard)
 
 function resetCVUpload() {
   cvFileName = null;
@@ -1119,6 +1120,7 @@ async function extractCVWithAI(base64) {
   const alertBox = document.getElementById('ai-alert');
   title.textContent = '🔄 AI กำลังอ่านและวิเคราะห์ CV...';
   alertBox.style.display = 'none';
+  cvExtracting = true;
   try {
     const res = await fetch(CONFIG.PROXY_URL, {
       method: 'POST',
@@ -1167,25 +1169,46 @@ async function extractCVWithAI(base64) {
     alertBox.style.display = 'flex';
     alertBox.className = 'alert alert-info';
     alertBox.innerHTML = 'ℹ️ AI อ่าน CV ไม่สำเร็จ — ไฟล์ยังแนบอยู่ กรุณากรอกข้อมูลเอง';
+  } finally {
+    cvExtracting = false;
   }
 }
 
+// อ่านค่าจาก input อย่างปลอดภัย — ถ้าหา element ไม่เจอจะ warn (กัน selector เพี้ยน) และคืน '' เสมอ (ไม่เคย undefined)
+function fieldVal(id) {
+  const el = document.getElementById(id);
+  if (!el) { console.warn(`[saveCandidate] ไม่พบ element #${id} — ตรวจ id ใน HTML ให้ตรง`); return ''; }
+  return (el.value ?? '').toString().trim();
+}
+
 async function saveCandidate() {
-  const first = document.getElementById('c-first').value.trim();
-  const last = document.getElementById('c-last').value.trim();
-  const vacancyId = document.getElementById('c-vacancy').value;
-  if (!first||!last||!vacancyId) { alert('กรุณากรอกชื่อ นามสกุล และตำแหน่งที่สมัคร'); return; }
+  // #3 Timing guard: ห้ามบันทึกระหว่าง AI ยังอ่าน CV อยู่ (ฟิลด์อาจยังไม่ถูกกรอก)
+  if (cvExtracting) { alert('⏳ AI กำลังอ่าน CV อยู่ กรุณารอสักครู่แล้วค่อยกดบันทึก'); return; }
+
+  const first = fieldVal('c-first');
+  const last = fieldVal('c-last');
+  const vacancyId = fieldVal('c-vacancy');
+  // Guard: required field หาย → ไม่ยิง Flow (กัน 400 จาก payload ว่าง/ไม่ครบ)
+  if (!first || !last || !vacancyId) { alert('กรุณากรอกชื่อ นามสกุล และตำแหน่งที่สมัคร'); return; }
+
   const vac = vacancies.find(v=>(v.id||v.ID)==vacancyId);
+  const vacNum = parseInt(vacancyId, 10);
   const payload = {
     Title: `${first} ${last}`,
-    Email: document.getElementById('c-email').value,
-    Phone: document.getElementById('c-phone').value,
-    VacancyID: parseInt(vacancyId),
-    VacancyTitle: vac?getVTitle(vac):'',
-    CandidateStatus: document.getElementById('c-status').value,
+    Email: fieldVal('c-email'),
+    Phone: fieldVal('c-phone'),
+    VacancyID: Number.isNaN(vacNum) ? vacancyId : vacNum,  // กัน NaN → ส่งค่าเดิมแทน null
+    VacancyTitle: (vac ? getVTitle(vac) : '') || '',
+    CandidateStatus: fieldVal('c-status') || 'New',
     FileName: cvFileBase64 ? cvFileName : null,
-    FileContent: cvFileBase64,
+    FileContent: cvFileBase64 || null,
   };
+  // Safety net: ถ้า payload ไม่มี field สำคัญ (เช่นทุกค่าหลุดเป็น undefined) อย่ายิง Flow เด็ดขาด
+  if (!payload.Title.trim() || !payload.VacancyID) {
+    console.error('[saveCandidate] payload ไม่ครบ — ยกเลิกการส่ง', payload);
+    alert('ข้อมูลไม่ครบ ไม่สามารถบันทึกได้ (กรุณาลองใหม่)');
+    return;
+  }
   // BUG diagnose: log payload แบบตัด base64 ออก (FileContent ยาวมาก) เพื่อให้เห็น field ที่ส่งจริงใน console
   console.log('[saveCandidate] POST payload:', {...payload, FileContent: cvFileBase64 ? `<base64 ${cvFileBase64.length} chars>` : null});
   const saveBtn = document.getElementById('c-save');
