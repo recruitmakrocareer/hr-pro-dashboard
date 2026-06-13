@@ -672,12 +672,12 @@ tbody tr:hover{background:#F8F7FF}
 // ดู .github/workflows/deploy.yml — ห้าม hardcode URL จริงในไฟล์นี้
 // ค่า placeholder __NAME__ ที่ยังไม่ถูกแทน (เช่นตอน dev/preview) จะถูกล้างเป็น '' → fallback ไป MOCK
 const CONFIG = {
-  GET_VACANCIES_URL:  '',
-  POST_VACANCY_URL:   '',   // Flow: POST New/Edit Vacancy
-  GET_CANDIDATES_URL: '',  // Flow: GET Candidates List
+  GET_VACANCIES_URL:  'https://4d5e96e05cb6e591aefe0bce82117f.8e.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/7eced539609c4e658e10d8b4ca8a0c84/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=NnZW8Uu1Vq1P-CMNE4sN7gofQTfWe9VadtkB6t42zAk',
+  POST_VACANCY_URL:   'https://4d5e96e05cb6e591aefe0bce82117f.8e.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/49e89cc1a25a4775b146a8b1bdabb67a/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=vTna3wQzrAriHFEHuZMHDlqrVnQOKpkHglohjf4uEWc',   // Flow: POST New/Edit Vacancy
+  GET_CANDIDATES_URL: 'https://4d5e96e05cb6e591aefe0bce82117f.8e.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/6d922addd2cd45cc8467e008e0b21631/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=Y4vSOZ9qB4H4CKMKWatHthc4prdMwyrCaCGK2Pw29UI',  // Flow: GET Candidates List
   // Flow: POST New Candidate — เขียนลง List `Candidates` โครงใหม่ (Title/Email/Phone/VacancyID/VacancyTitle/CandidateStatus/CVLink)
   // ตัดสินใจ 12/06/2026: หน้าเว็บอ่านโครงใหม่อยู่แล้ว จึงไม่แก้ Flow — คอลัมน์โครงเก่า (FirstName/LastName/ResumeURL ฯลฯ) ไม่ถูกใช้ ลบจาก List ได้
-  POST_CANDIDATE_URL: '',
+  POST_CANDIDATE_URL: 'https://4d5e96e05cb6e591aefe0bce82117f.8e.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/682d87a24c9a4d6dba346f905d90f73a/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=qaesZFd8NKQ6QoftZbkFD-g8Dg_Su20SHYcZrfpa9Bk',
   COPILOT_IFRAME_URL: '',  // Copilot Studio embed URL
   CLAUDE_API_KEY: '',
   PROXY_URL: 'https://hr-pro-claude-proxy.oonllos.workers.dev',
@@ -686,6 +686,14 @@ const CONFIG = {
 // placeholder ที่ยังไม่ถูก inject (รูปแบบ __ABC__) ให้ถือว่าว่าง เพื่อไม่ให้ fetch URL ปลอม
 Object.keys(CONFIG).forEach(k => {
   if (typeof CONFIG[k] === 'string' && /^__[A-Z_]+__$/.test(CONFIG[k])) CONFIG[k] = '';
+});
+// log สถานะ URL ทุกครั้งที่โหลด (true=มีค่า, false=ว่าง) — ถ้า false แปลว่า secret ไม่ถูก inject -> เว็บจะตกไป MOCK
+console.log('[CONFIG] URLs present?', {
+  GET_VACANCIES_URL: !!CONFIG.GET_VACANCIES_URL,
+  POST_VACANCY_URL: !!CONFIG.POST_VACANCY_URL,
+  GET_CANDIDATES_URL: !!CONFIG.GET_CANDIDATES_URL,
+  POST_CANDIDATE_URL: !!CONFIG.POST_CANDIDATE_URL,
+  PROXY_URL: !!CONFIG.PROXY_URL,
 });
 
 // ===================== MASTER DATA =====================
