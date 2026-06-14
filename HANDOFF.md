@@ -123,7 +123,11 @@
   - **▶️ ผู้ใช้ต้องทำ:** สร้าง List ใหม่ (เช่น `KPISnapshot`: Date/Total/Open/Close/Candidates) + flow HTTP POST
     ที่ **upsert ตาม Date** (กัน record ซ้ำข้ามผู้ใช้) → ตั้ง secret `POST_SNAPSHOT_URL` → merge เข้า main
   - หมายเหตุ: เป็น client-driven (ต้องมีคนเปิด dashboard ในวันนั้น); ถ้าต้องการแน่นอนกว่า ใช้ Scheduled flow ฝั่ง SharePoint แทน
-  - ยังไม่มี UI แสดงเทรนด์ย้อนหลัง (เก็บอย่างเดียวตามที่ตกลง) — ทำ GET+กราฟเพิ่มได้ภายหลัง
+- **กราฟเทรนด์ KPI (minimal):** การ์ด `#trend-card` (ซ่อน default) เหนือตาราง — line chart วาดด้วย inline SVG (ไม่พึ่ง library)
+  - `loadSnapshots()` GET `CONFIG.GET_SNAPSHOTS_URL` → เรียงตามวันที่ 30 วันล่าสุด → `renderTrend()` วาดเส้น
+  - สลับเมตริกด้วย pill: เปิดรับ/ปิด/ผู้สมัคร/ทั้งหมด (`selectTrend()`); ข้อมูล < 2 วันแสดงข้อความแทนกราฟ
+  - secret **optional** `GET_SNAPSHOTS_URL` — ถ้าไม่ตั้งหรือไม่มีข้อมูล การ์ดจะถูกซ่อน (ไม่รก)
+  - **▶️ ผู้ใช้ต้องทำ:** flow GET คืน `value[]` ของ List KPISnapshot (Date/Total/Open/Close/Candidates) + ตั้ง secret `GET_SNAPSHOTS_URL`
 
 ## 🐛 Fix: ตำแหน่ง/สาขา ขึ้น "[object Object]"
 - SharePoint คืน `Position`/`Branch` (และอาจ `Status`/candidate fields) เป็น **object** (lookup/choice/MMD เช่น `{Value}`/`{Label}`/`{LookupValue}`) → render ตรง ๆ เป็น `[object Object]`

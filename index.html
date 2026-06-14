@@ -125,6 +125,13 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14
 .panel-title{font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px}
 .panel-title svg{opacity:0.5}
 .panel-actions{display:flex;gap:8px}
+/* trend (minimal) */
+.trend-pills{display:flex;gap:6px;flex-wrap:wrap}
+.trend-pill{font-size:12px;padding:3px 11px;border:1px solid var(--border);background:var(--bg);border-radius:999px;cursor:pointer;color:var(--text-2);transition:.15s}
+.trend-pill:hover{border-color:var(--border-2)}
+.trend-pill.active{background:var(--primary);border-color:var(--primary);color:#fff}
+.trend-body{padding:16px 20px}
+.trend-empty{font-size:12px;color:var(--text-3);text-align:center;padding:18px 0}
 
 /* ===================== BUTTONS ===================== */
 .btn{
@@ -419,6 +426,20 @@ tbody tr:hover{background:#F8F7FF}
         </div>
       </div>
 
+      <!-- KPI TREND (minimal) — แสดงเมื่อมีข้อมูล snapshot เท่านั้น -->
+      <div class="panel" id="trend-card" style="display:none;margin-bottom:16px">
+        <div class="panel-header">
+          <div class="panel-title">📈 เทรนด์ KPI</div>
+          <div class="trend-pills">
+            <button class="trend-pill active" onclick="selectTrend('Open',this)">เปิดรับ</button>
+            <button class="trend-pill" onclick="selectTrend('Close',this)">ปิด</button>
+            <button class="trend-pill" onclick="selectTrend('Candidates',this)">ผู้สมัคร</button>
+            <button class="trend-pill" onclick="selectTrend('Total',this)">ทั้งหมด</button>
+          </div>
+        </div>
+        <div class="trend-body" id="trend-body"></div>
+      </div>
+
       <!-- VACANCY TABLE -->
       <div class="panel">
         <div class="panel-header">
@@ -706,6 +727,9 @@ const CONFIG = {
   // Flow: POST Daily KPI Snapshot — บันทึก stamp KPI รายวันลง List (Date/Total/Open/Close/Candidates)
   // optional — ถ้ายังไม่ตั้ง secret จะไม่ stamp (ข้ามเงียบ ๆ)
   POST_SNAPSHOT_URL: '',
+  // Flow: GET KPI Snapshots — คืนประวัติ stamp รายวันสำหรับวาดกราฟเทรนด์
+  // optional — ถ้ายังไม่ตั้ง secret การ์ดเทรนด์จะถูกซ่อน
+  GET_SNAPSHOTS_URL: '',
   COPILOT_IFRAME_URL: '',  // Copilot Studio embed URL
   CLAUDE_API_KEY: '',
   PROXY_URL: 'https://hr-pro-claude-proxy.oonllos.workers.dev',
@@ -724,6 +748,7 @@ console.log('[CONFIG] URLs present?', {
   CLOSE_VACANCY_URL: !!CONFIG.CLOSE_VACANCY_URL,
   GET_BRANCHMASTER_URL: !!CONFIG.GET_BRANCHMASTER_URL,
   POST_SNAPSHOT_URL: !!CONFIG.POST_SNAPSHOT_URL,
+  GET_SNAPSHOTS_URL: !!CONFIG.GET_SNAPSHOTS_URL,
   PROXY_URL: !!CONFIG.PROXY_URL,
 });
 
@@ -843,7 +868,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // loadVacancies ก่อน handleUrlAction — dropdown ผู้สมัครอ่านจาก vacancies จึงต้องโหลดเสร็จก่อน pre-select
   // stampDailyKPI หลังโหลด vacancies+candidates ครบ (ตัวเลข KPI ต้องครบก่อน stamp)
   loadBranchMaster().finally(() => {
-    Promise.all([loadVacancies().then(handleUrlAction), loadCandidates()]).then(stampDailyKPI);
+    Promise.all([loadVacancies().then(handleUrlAction), loadCandidates()])
+      .then(stampDailyKPI)        // stamp KPI วันนี้ก่อน
+      .then(loadSnapshots);       // แล้วค่อยโหลดประวัติมาวาดกราฟ (รวมวันนี้)
   });
 });
 
@@ -882,6 +909,75 @@ async function stampDailyKPI() {
     try { localStorage.setItem('hrpro_lastStamp', today); } catch {}
     console.log('[stampDailyKPI] บันทึก snapshot วันนี้:', payload);
   } catch (e) { console.error('[stampDailyKPI] error:', e); }
+}
+
+// ----- KPI Trend (minimal) -----
+let snapshots = [];          // [{ Date, Total, Open, Close, Candidates }] เรียงตามวันที่
+let trendMetric = 'Open';
+const TREND_LABEL = { Open:'เปิดรับ', Close:'ปิด', Candidates:'ผู้สมัคร', Total:'ทั้งหมด' };
+
+async function loadSnapshots() {
+  if (!CONFIG.GET_SNAPSHOTS_URL) return;        // ไม่มี secret → ซ่อนการ์ด (default)
+  try {
+    const res = await fetch(CONFIG.GET_SNAPSHOTS_URL, {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({})
+    });
+    if (!res.ok) { console.error('[loadSnapshots] HTTP', res.status); return; }
+    const data = await res.json();
+    snapshots = (data.value || [])
+      .map(s => ({
+        Date: (fieldText(s.Date) || '').split('T')[0],
+        Total: +fieldText(s.Total) || 0, Open: +fieldText(s.Open) || 0,
+        Close: +fieldText(s.Close) || 0, Candidates: +fieldText(s.Candidates) || 0,
+      }))
+      .filter(s => s.Date)
+      .sort((a, b) => a.Date.localeCompare(b.Date))
+      .slice(-30);                               // ดูย้อนหลังสูงสุด 30 วัน
+    if (snapshots.length) {
+      document.getElementById('trend-card').style.display = '';
+      renderTrend();
+    }
+  } catch (e) { console.error('[loadSnapshots] error:', e); }
+}
+
+function selectTrend(metric, btn) {
+  trendMetric = metric;
+  document.querySelectorAll('.trend-pill').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderTrend();
+}
+
+// วาดกราฟเส้นแบบเบา ๆ ด้วย inline SVG (ไม่พึ่ง library)
+function renderTrend() {
+  const body = document.getElementById('trend-body');
+  const pts = snapshots.map(s => ({ x: s.Date, y: s[trendMetric] || 0 }));
+  if (pts.length < 2) {
+    body.innerHTML = `<div class="trend-empty">ยังมีข้อมูลไม่พอวาดกราฟ (ต้องการอย่างน้อย 2 วัน) — ขณะนี้ ${pts.length} วัน</div>`;
+    return;
+  }
+  const W = 640, H = 120, padX = 8, padT = 12, padB = 22;
+  const ys = pts.map(p => p.y), maxY = Math.max(...ys, 1), minY = Math.min(...ys, 0);
+  const span = (maxY - minY) || 1;
+  const sx = i => padX + i * (W - padX * 2) / (pts.length - 1);
+  const sy = y => padT + (1 - (y - minY) / span) * (H - padT - padB);
+  const line = pts.map((p, i) => `${i ? 'L' : 'M'}${sx(i).toFixed(1)},${sy(p.y).toFixed(1)}`).join(' ');
+  const area = `${line} L${sx(pts.length - 1).toFixed(1)},${(H - padB)} L${padX},${(H - padB)} Z`;
+  const last = pts[pts.length - 1], first = pts[0];
+  const dot = `<circle cx="${sx(pts.length - 1).toFixed(1)}" cy="${sy(last.y).toFixed(1)}" r="3" fill="var(--primary-light)"/>`;
+  const fmt = d => d.slice(5);  // MM-DD
+  body.innerHTML = `
+    <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:6px">
+      <span style="font-size:22px;font-weight:700;color:var(--primary)">${last.y}</span>
+      <span style="font-size:12px;color:var(--text-3)">${TREND_LABEL[trendMetric]} ล่าสุด (${fmt(last.x)}) · สูงสุด ${maxY} · ${pts.length} วัน</span>
+    </div>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:120px;display:block">
+      <path d="${area}" fill="var(--primary-pale)"/>
+      <path d="${line}" fill="none" stroke="var(--primary-light)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      ${dot}
+    </svg>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-3);margin-top:2px">
+      <span>${fmt(first.x)}</span><span>${fmt(last.x)}</span>
+    </div>`;
 }
 
 // ===================== LOAD DATA =====================
