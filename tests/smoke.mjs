@@ -51,7 +51,7 @@ const requiredFns = [
   'renderVacancies', 'renderCandidates', 'updateKPI', 'showPage',
   'handleUrlAction', 'matchVacancyId', 'openCandidateModal',
   'editVacancy', 'selectWithValue', 'confirmCloseVacancy', 'hideClosePanel',
-  'getVRegion', 'getVAreaHR', 'populateVacancyFilters',
+  'getVRegion', 'getVAreaHR', 'populateVacancyFilters', 'loadBranchMaster', 'branchOf',
   // Web Agent tools (client-side)
   'runTool', 'toolResolveBranch', 'toolGetOpenVacancies', 'toolCloseVacancies', 'normBranch',
 ];
@@ -63,7 +63,7 @@ console.log('3b) Agent tool names (Web Agent Spec) ถูกประกาศ�
   .forEach(t => check(`tool '${t}'`, new RegExp(`name:\\s*['"]${t}['"]`).test(html)));
 
 console.log('4) CONFIG keys ครบ');
-['GET_VACANCIES_URL', 'POST_VACANCY_URL', 'GET_CANDIDATES_URL', 'POST_CANDIDATE_URL', 'CLOSE_VACANCY_URL', 'PROXY_URL', 'CLAUDE_API_KEY']
+['GET_VACANCIES_URL', 'POST_VACANCY_URL', 'GET_CANDIDATES_URL', 'POST_CANDIDATE_URL', 'CLOSE_VACANCY_URL', 'GET_BRANCHMASTER_URL', 'PROXY_URL', 'CLAUDE_API_KEY']
   .forEach(k => check(`CONFIG.${k}`, new RegExp(`${k}\\s*:`).test(html)));
 
 console.log('5) TD-01 guard — ไม่มี URL ลับ (sig=) hardcode ใน index.html');
