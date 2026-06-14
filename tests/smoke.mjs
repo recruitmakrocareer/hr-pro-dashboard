@@ -39,6 +39,7 @@ const requiredIds = [
   'cv-file', 'upload-zone', 'chat-input', 'chat-input-mobile',
   'c-first', 'c-last', 'c-vacancy', 'c-status', 'kpi-total',
   'v-branch', 'v-title', 'v-opendate', 'v-close-panel', 'v-close-note',
+  'filter-region', 'filter-area',
 ];
 requiredIds.forEach(id =>
   check(`#${id}`, new RegExp(`id=["']${id}["']`).test(html)));
@@ -50,6 +51,7 @@ const requiredFns = [
   'renderVacancies', 'renderCandidates', 'updateKPI', 'showPage',
   'handleUrlAction', 'matchVacancyId', 'openCandidateModal',
   'editVacancy', 'selectWithValue', 'confirmCloseVacancy', 'hideClosePanel',
+  'getVRegion', 'getVAreaHR', 'populateVacancyFilters',
   // Web Agent tools (client-side)
   'runTool', 'toolResolveBranch', 'toolGetOpenVacancies', 'toolCloseVacancies', 'normBranch',
 ];

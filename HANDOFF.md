@@ -95,6 +95,17 @@
   (เดิมใช้ `confirm()` เฉย ๆ) — `CloseNote` ส่งเมื่อมีข้อความ; SharePoint/flow จะ map เมื่อมี column รองรับ
   - ▶️ ถ้าต้องการเก็บหมายเหตุจริง: เพิ่ม column `CloseNote` (Text) ใน List JobVacancy + ให้ flow รับ field นี้
 
+## 🆕 ทำเพิ่ม (session นี้ — ตาราง/filter ตำแหน่งงาน + normalize สาขา)
+- **Normalize ชื่อสาขา:** JobVacancy เก็บ "เพชรบูรณ์" แต่ master `BRANCHES` เป็น "สาขาเพชรบูรณ์" →
+  ใช้ `normBranch()` (ตัด prefix "สาขา") ใน `applyFilter` (branch) และ `matchVacancyId` ให้ match ทน 2 แบบ
+  (agent tools `resolve_branch`/`get_open_vacancies` ใช้ `normBranch` อยู่แล้ว)
+- **ตารางตำแหน่งงาน:** เอา **Recruiter** + **วันที่เปิดรับ** ออก → ใส่ **Region** + **Area HR** แทน (ทั้ง 2 ตาราง)
+  - `getVRegion(v)` = `Region`; `getVAreaHR(v)` = ลองหลายชื่อ field (`AreaHR`/`Area HR`/`AreaHRName`/...)
+  - ⚠️ Area HR ตามสเปกอยู่ใน **BranchMaster** ไม่ใช่ JobVacancy — ถ้า column แสดง "-" ทุกแถว แปลว่า JobVacancy
+    ไม่มี field นี้ → ต้องเพิ่ม column AreaHR ใน List + ให้ GET flow คืนมา หรือ map จาก BranchMaster ฝั่ง flow
+- **Filter ใหม่:** `#filter-region` + `#filter-area` (เติม option จากค่าจริงในข้อมูลด้วย `populateVacancyFilters()`)
+- system prompt ของ AI โชว์ Region/Area HR แทน Recruiter
+
 ## 🐛 Fix: ตำแหน่ง/สาขา ขึ้น "[object Object]"
 - SharePoint คืน `Position`/`Branch` (และอาจ `Status`/candidate fields) เป็น **object** (lookup/choice/MMD เช่น `{Value}`/`{Label}`/`{LookupValue}`) → render ตรง ๆ เป็น `[object Object]`
 - เพิ่ม helper `fieldText(val)` ดึง string จาก object ทน ๆ + `getVBranch(v)` และให้ `getVStatus/getVTitle` ใช้ `fieldText`
