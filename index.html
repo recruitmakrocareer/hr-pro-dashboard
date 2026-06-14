@@ -849,7 +849,10 @@ async function loadVacancies() {
         body: JSON.stringify({})
       });
       const data = await res.json();
-      vacancies = data.value || [];
+      const allItems = data.value || [];
+      vacancies = allItems.filter(v => !isEmptyVacancy(v));   // กรองแถวว่างจาก List ออก
+      const dropped = allItems.length - vacancies.length;
+      if (dropped > 0) console.warn(`[loadVacancies] ข้าม ${dropped} แถวว่าง (ไม่มีตำแหน่ง/สาขา) จากทั้งหมด ${allItems.length} → เหลือ ${vacancies.length}`);
       console.log('Column names:', Object.keys(vacancies[0] || {}));
       console.log('First item:', vacancies[0]);
       if(vacancies.length > 0) {
@@ -933,6 +936,10 @@ function getVStatus(v) {
 }
 function getVTitle(v)  { return fieldText(v.Position) || fieldText(v.Title) || '-'; }
 function getVBranch(v) { return fieldText(v.Branch); }
+// แถวว่างจาก SharePoint (ไม่มีทั้งตำแหน่งและสาขา) → ไม่ต้องแสดง/ไม่นับ KPI
+function isEmptyVacancy(v) {
+  return !(fieldText(v.Position) || fieldText(v.Title)) && !getVBranch(v);
+}
 
 function updateKPI() {
   document.getElementById('kpi-total').textContent = vacancies.length;
