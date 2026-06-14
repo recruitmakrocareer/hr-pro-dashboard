@@ -38,6 +38,7 @@ const requiredIds = [
   'vacancy-tbody', 'candidate-grid', 'candidate-modal', 'vacancy-modal',
   'cv-file', 'upload-zone', 'chat-input', 'chat-input-mobile',
   'c-first', 'c-last', 'c-vacancy', 'c-status', 'kpi-total',
+  'v-branch', 'v-title', 'v-opendate', 'v-close-panel', 'v-close-note',
 ];
 requiredIds.forEach(id =>
   check(`#${id}`, new RegExp(`id=["']${id}["']`).test(html)));
@@ -48,9 +49,16 @@ const requiredFns = [
   'handleCVUpload', 'extractCVWithAI', 'sendChatCore', 'buildSystemPrompt',
   'renderVacancies', 'renderCandidates', 'updateKPI', 'showPage',
   'handleUrlAction', 'matchVacancyId', 'openCandidateModal',
+  'editVacancy', 'selectWithValue', 'confirmCloseVacancy', 'hideClosePanel',
+  // Web Agent tools (client-side)
+  'runTool', 'toolResolveBranch', 'toolGetOpenVacancies', 'toolCloseVacancies', 'normBranch',
 ];
 requiredFns.forEach(fn =>
   check(`function ${fn}()`, new RegExp(`function\\s+${fn}\\s*\\(`).test(html)));
+
+console.log('3b) Agent tool names (Web Agent Spec) ถูกประกาศใน tools');
+['resolve_branch', 'get_open_vacancies', 'close_vacancies', 'add_vacancy', 'add_vacancies']
+  .forEach(t => check(`tool '${t}'`, new RegExp(`name:\\s*['"]${t}['"]`).test(html)));
 
 console.log('4) CONFIG keys ครบ');
 ['GET_VACANCIES_URL', 'POST_VACANCY_URL', 'GET_CANDIDATES_URL', 'POST_CANDIDATE_URL', 'CLOSE_VACANCY_URL', 'PROXY_URL', 'CLAUDE_API_KEY']
