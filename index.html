@@ -955,7 +955,8 @@ async function loadBranchMaster() {
     });
     if (!res.ok) { console.error('[loadBranchMaster] HTTP', res.status); return; }
     const data = await res.json();
-    const items = data.value || [];
+    // ทนทั้ง { value:[...] } (เหมือน flow อื่น) และ array เปล่า ๆ (Response Body = value token ตรง ๆ)
+    const items = Array.isArray(data) ? data : (data.value || data.body?.value || data.body || []);
     const map = {};
     for (const b of items) {
       const id     = fieldText(b.ID) || fieldText(b.Id) || fieldText(b.ItemInternalId);
@@ -969,7 +970,9 @@ async function loadBranchMaster() {
       if (code)   map['#code:' + code.toLowerCase()] = rec;
     }
     branchInfo = map;
-    console.log('[loadBranchMaster] โหลด', items.length, 'สาขา → map', Object.keys(map).length, 'คีย์ | first keys:', Object.keys(items[0] || {}));
+    console.log('[loadBranchMaster] โหลด', items.length, 'สาขา → map', Object.keys(map).length,
+      'คีย์ | rootType:', Array.isArray(data) ? 'array' : typeof data,
+      '| first keys:', Object.keys(items[0] || {}), '| sample:', items[0]);
   } catch(e) { console.error('[loadBranchMaster] error:', e); }
 }
 
