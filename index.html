@@ -595,6 +595,15 @@ tbody tr:hover{background:#F8F7FF}
         <label class="form-label">หมายเหตุ</label>
         <textarea class="form-control" id="v-notes" rows="2" placeholder="รายละเอียดเพิ่มเติม..."></textarea>
       </div>
+      <!-- ช่องหมายเหตุการปิดตำแหน่ง — เผยเมื่อกด "ปิดตำแหน่งงาน" -->
+      <div class="form-group" id="v-close-panel" style="display:none;padding:12px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px">
+        <label class="form-label" style="color:#b91c1c">หมายเหตุการปิดตำแหน่ง</label>
+        <textarea class="form-control" id="v-close-note" rows="2" placeholder="เหตุผล/รายละเอียดการปิดตำแหน่ง (ไม่บังคับ)..."></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">
+          <button class="btn" onclick="hideClosePanel()">ยกเลิก</button>
+          <button class="btn btn-danger" id="v-close-confirm" onclick="confirmCloseVacancy()">🔒 ยืนยันปิดตำแหน่ง</button>
+        </div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-danger" id="v-close-btn" onclick="closeVacancy()" style="display:none;margin-right:auto">🔒 ปิดตำแหน่งงาน</button>
@@ -1049,7 +1058,22 @@ function openVacancyModal(v) {
   document.getElementById('v-status').value = 'Open';
   document.getElementById('v-slots').value = 1;
   document.getElementById('v-close-btn').style.display = 'none';  // ตำแหน่งใหม่ยังปิดไม่ได้
+  document.getElementById('v-close-panel').style.display = 'none';
   openModal('vacancy-modal');
+}
+
+// ตั้งค่าของ <select> โดยคงค่าเดิมไว้เสมอ — ถ้าค่าจากข้อมูลไม่มีใน option (เช่น สาขาที่ไม่อยู่ใน master list
+// หรือชื่อมี/ไม่มี prefix "สาขา") ให้เพิ่มเป็น option ชั่วคราวแล้วเลือก เพื่อไม่ให้ dropdown แสดงว่าง
+function selectWithValue(id, value) {
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  const v = (value ?? '').toString().trim();
+  if (v && !Array.from(sel.options).some(o => o.value === v)) {
+    const opt = document.createElement('option');
+    opt.value = v; opt.textContent = v;
+    sel.appendChild(opt);
+  }
+  sel.value = v;
 }
 
 function editVacancy(id) {
@@ -1058,13 +1082,17 @@ function editVacancy(id) {
   editVacancyId = v.ID || v.id;
   document.getElementById('v-id').value = editVacancyId;
   document.getElementById('vacancy-modal-title').textContent = 'แก้ไขตำแหน่งงาน';
-  document.getElementById('v-title').value = fieldText(v.Position) || fieldText(v.Title) || '';
-  document.getElementById('v-branch').value = getVBranch(v);
+  // คงข้อมูลเดิมไว้ครบ — ใช้ selectWithValue กัน dropdown แสดงว่างเมื่อค่าไม่ตรง option
+  selectWithValue('v-title', fieldText(v.Position) || fieldText(v.Title) || '');
+  selectWithValue('v-branch', getVBranch(v));
   document.getElementById('v-status').value = getVStatus(v) || 'Open';
   document.getElementById('v-slots').value = v.Count || v.Slots || 1;
   document.getElementById('v-recruiter').value = v.Reporter || v.Recruiter || v.RecruiterName || '';
-  document.getElementById('v-opendate').value = (v.OpenDate||'').split('T')[0];
-  document.getElementById('v-notes').value = v.Notes || '';
+  const od = fieldText(v.OpenDate) || fieldText(v.OpenedDate) || fieldText(v.Created) || '';
+  document.getElementById('v-opendate').value = od ? od.split('T')[0] : '';
+  document.getElementById('v-notes').value = fieldText(v.Notes) || '';
+  // ซ่อนช่องหมายเหตุการปิดทุกครั้งที่เปิด modal (กันค้างจากครั้งก่อน)
+  hideClosePanel();
   // ปุ่มปิดตำแหน่ง: โชว์เฉพาะตำแหน่งเดิมที่ยังไม่ถูกปิด (กันปิดซ้ำ)
   document.getElementById('v-close-btn').style.display = getVStatus(v) === 'Close' ? 'none' : '';
   openModal('vacancy-modal');
@@ -1104,19 +1132,38 @@ async function saveVacancy() {
   } catch(e) { alert('เกิดข้อผิดพลาด กรุณาลองใหม่'); }
 }
 
-// ปิดตำแหน่งงาน (Close Vacancy) — ตั้ง Status='Close' + บันทึก ClosedDate
-// ใช้ flow เฉพาะ HR_CLOSE_Vacancy (CLOSE_VACANCY_URL) ถ้ามี — ไม่งั้น fallback ไป POST_VACANCY_URL (ตั้ง Status ได้อยู่แล้ว)
-async function closeVacancy() {
+// ปิดตำแหน่งงาน (Close Vacancy) — ขั้นแรก: เผยช่องหมายเหตุการปิด ให้ผู้ใช้เขียนข้อความก่อนยืนยัน
+function closeVacancy() {
   const spId = document.getElementById('v-id').value;
   if (!spId) { alert('ต้องบันทึกตำแหน่งงานก่อน จึงจะปิดได้'); return; }
-  const title = document.getElementById('v-title').value || 'ตำแหน่งนี้';
-  if (!confirm(`ยืนยันปิดตำแหน่ง "${title}" ?\nสถานะจะเปลี่ยนเป็น "ปิดแล้ว" และบันทึกวันที่ปิด`)) return;
+  const note = document.getElementById('v-close-note'); if (note) note.value = '';
+  document.getElementById('v-close-panel').style.display = '';
+  document.getElementById('v-close-btn').style.display = 'none';
+  if (note) note.focus();
+}
+
+// ซ่อนช่องหมายเหตุการปิด แล้วโชว์ปุ่ม "ปิดตำแหน่งงาน" กลับ (เฉพาะตำแหน่งที่ยังไม่ถูกปิด)
+function hideClosePanel() {
+  const panel = document.getElementById('v-close-panel');
+  if (panel) panel.style.display = 'none';
+  const status = document.getElementById('v-status').value;
+  const spId = document.getElementById('v-id').value;
+  document.getElementById('v-close-btn').style.display = (spId && status !== 'Close') ? '' : 'none';
+}
+
+// ยืนยันปิดตำแหน่ง — ตั้ง Status='Close' + ClosedDate + ส่งหมายเหตุการปิด (CloseNote) ถ้ามี
+// ใช้ flow เฉพาะ HR_CLOSE_Vacancy (CLOSE_VACANCY_URL) ถ้ามี — ไม่งั้น fallback ไป POST_VACANCY_URL (ตั้ง Status ได้อยู่แล้ว)
+async function confirmCloseVacancy() {
+  const spId = document.getElementById('v-id').value;
+  if (!spId) { alert('ต้องบันทึกตำแหน่งงานก่อน จึงจะปิดได้'); return; }
+  const note = (document.getElementById('v-close-note').value || '').trim();
 
   const today = new Date().toISOString().split('T')[0];
   // ClosedBy ปล่อยให้ flow ประทับจากผู้ใช้ของ SharePoint connection (หน้าเว็บยังไม่มีระบบ login)
   const payload = { id: parseInt(spId, 10), Status: 'Close', ClosedDate: today };
+  if (note) payload.CloseNote = note;  // ส่งหมายเหตุการปิดถ้ามี (flow/SharePoint จะ map เมื่อมี column รองรับ)
   const url = CONFIG.CLOSE_VACANCY_URL || CONFIG.POST_VACANCY_URL;
-  const btn = document.getElementById('v-close-btn');
+  const btn = document.getElementById('v-close-confirm');
   btn.disabled = true; btn.textContent = '⏳ กำลังปิด...';
   try {
     if (url) {
@@ -1129,7 +1176,7 @@ async function closeVacancy() {
       await loadVacancies();
     } else {
       const idx = vacancies.findIndex(v=>(v.id||v.ID)==spId);
-      if (idx>=0) vacancies[idx] = {...vacancies[idx], Status:'Close', CloseDate:today};
+      if (idx>=0) vacancies[idx] = {...vacancies[idx], Status:'Close', CloseDate:today, CloseNote:note};
       renderVacancies();
       updateKPI();
     }
@@ -1139,7 +1186,7 @@ async function closeVacancy() {
     console.error('closeVacancy error:', e);
     alert('ปิดตำแหน่งไม่สำเร็จ: ' + (e.message||'unknown') + '\n(ดู Console สำหรับรายละเอียด)');
   } finally {
-    btn.disabled = false; btn.textContent = '🔒 ปิดตำแหน่งงาน';
+    btn.disabled = false; btn.textContent = '🔒 ยืนยันปิดตำแหน่ง';
   }
 }
 

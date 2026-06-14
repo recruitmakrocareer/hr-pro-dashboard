@@ -38,6 +38,7 @@ const requiredIds = [
   'vacancy-tbody', 'candidate-grid', 'candidate-modal', 'vacancy-modal',
   'cv-file', 'upload-zone', 'chat-input', 'chat-input-mobile',
   'c-first', 'c-last', 'c-vacancy', 'c-status', 'kpi-total',
+  'v-branch', 'v-title', 'v-opendate', 'v-close-panel', 'v-close-note',
 ];
 requiredIds.forEach(id =>
   check(`#${id}`, new RegExp(`id=["']${id}["']`).test(html)));
@@ -48,6 +49,7 @@ const requiredFns = [
   'handleCVUpload', 'extractCVWithAI', 'sendChatCore', 'buildSystemPrompt',
   'renderVacancies', 'renderCandidates', 'updateKPI', 'showPage',
   'handleUrlAction', 'matchVacancyId', 'openCandidateModal',
+  'editVacancy', 'selectWithValue', 'confirmCloseVacancy', 'hideClosePanel',
   // Web Agent tools (client-side)
   'runTool', 'toolResolveBranch', 'toolGetOpenVacancies', 'toolCloseVacancies', 'normBranch',
 ];

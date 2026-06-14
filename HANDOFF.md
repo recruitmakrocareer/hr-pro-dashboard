@@ -86,6 +86,15 @@
 ### ▶️ ถ้าต้องการ resolve_branch แบบเต็ม (location_code/region/name_en) ในอนาคต
 ต้องมี master data สาขา (BranchMaster) ฝั่ง client หรือสร้าง flow `HR_Resolve_Branch` + secret แล้วเปลี่ยน tool เป็นเรียก flow
 
+## 🆕 ทำเพิ่ม (session นี้ — UX modal แก้ไขตำแหน่ง)
+- **คงข้อมูลเดิมตอนแก้ไข:** เพิ่ม `selectWithValue()` — ถ้าค่า สาขา/ตำแหน่ง จาก SharePoint ไม่ตรง option ใน master list
+  (เช่น prefix "สาขา" ต่างกัน หรือสาขานอก list) จะเพิ่มเป็น option ชั่วคราวแล้วเลือก → dropdown ไม่แสดงว่างอีก
+  + `v-opendate`/`v-notes` อ่านผ่าน `fieldText` + fallback (OpenDate/OpenedDate/Created)
+- **หมายเหตุการปิดตำแหน่ง:** กด "🔒 ปิดตำแหน่งงาน" → เผย panel `#v-close-panel` (textarea `#v-close-note`) ให้เขียนข้อความ
+  → กด "ยืนยันปิดตำแหน่ง" (`confirmCloseVacancy()`) ส่ง `{ id, Status:'Close', ClosedDate, CloseNote? }`
+  (เดิมใช้ `confirm()` เฉย ๆ) — `CloseNote` ส่งเมื่อมีข้อความ; SharePoint/flow จะ map เมื่อมี column รองรับ
+  - ▶️ ถ้าต้องการเก็บหมายเหตุจริง: เพิ่ม column `CloseNote` (Text) ใน List JobVacancy + ให้ flow รับ field นี้
+
 ## 🐛 Fix: ตำแหน่ง/สาขา ขึ้น "[object Object]"
 - SharePoint คืน `Position`/`Branch` (และอาจ `Status`/candidate fields) เป็น **object** (lookup/choice/MMD เช่น `{Value}`/`{Label}`/`{LookupValue}`) → render ตรง ๆ เป็น `[object Object]`
 - เพิ่ม helper `fieldText(val)` ดึง string จาก object ทน ๆ + `getVBranch(v)` และให้ `getVStatus/getVTitle` ใช้ `fieldText`
