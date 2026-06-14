@@ -48,9 +48,15 @@ const requiredFns = [
   'handleCVUpload', 'extractCVWithAI', 'sendChatCore', 'buildSystemPrompt',
   'renderVacancies', 'renderCandidates', 'updateKPI', 'showPage',
   'handleUrlAction', 'matchVacancyId', 'openCandidateModal',
+  // Web Agent tools (client-side)
+  'runTool', 'toolResolveBranch', 'toolGetOpenVacancies', 'toolCloseVacancies', 'normBranch',
 ];
 requiredFns.forEach(fn =>
   check(`function ${fn}()`, new RegExp(`function\\s+${fn}\\s*\\(`).test(html)));
+
+console.log('3b) Agent tool names (Web Agent Spec) ถูกประกาศใน tools');
+['resolve_branch', 'get_open_vacancies', 'close_vacancies', 'add_vacancy', 'add_vacancies']
+  .forEach(t => check(`tool '${t}'`, new RegExp(`name:\\s*['"]${t}['"]`).test(html)));
 
 console.log('4) CONFIG keys ครบ');
 ['GET_VACANCIES_URL', 'POST_VACANCY_URL', 'GET_CANDIDATES_URL', 'POST_CANDIDATE_URL', 'CLOSE_VACANCY_URL', 'PROXY_URL', 'CLAUDE_API_KEY']

@@ -4,7 +4,7 @@
 
 ## โปรเจกต์
 - **Repo:** `recruitmakrocareer/hr-pro-dashboard`
-- **Branch dev:** `claude/focused-pasteur-0h4bfm` (พัฒนาบนนี้ แล้ว merge เข้า `main`)
+- **Branch dev:** `claude/relaxed-johnson-x3w2a5` (พัฒนาบนนี้ แล้ว merge เข้า `main`) — branch เก่า: `claude/focused-pasteur-0h4bfm`
 - **Stack:** SPA ไฟล์เดียว `index.html` → โฮสต์ GitHub Pages (`https://recruitmakrocareer.github.io/hr-pro-dashboard/`)
 - **Data:** SharePoint ผ่าน Power Automate flows
 - **AI:** Claude ผ่าน Cloudflare Worker proxy (`hr-pro-claude-proxy`, ดู `worker.js`)
@@ -64,6 +64,27 @@
 - URLSearchParams decode `%26`→`&`, `+`→space, Thai % ให้อัตโนมัติ → match ตรง POSITIONS/Branch
 - Adaptive Card JSON (ฝั่ง Copilot Studio) ใช้ `Action.OpenUrl` ไป `.../?action=add-applicant[&branch=&position=]` — เป็นงานฝั่ง Agent (ไม่ใช่ code repo นี้)
 - Smoke test ครอบ `handleUrlAction` / `matchVacancyId` / `openCandidateModal` แล้ว
+
+## 🆕 ทำเพิ่ม (session นี้ — Web Agent Spec: อัปเกรด AI agent ในเว็บให้ตรงสเปก)
+อ้างอิงเอกสาร `AgentHRPro_WebAgent_Spec.docx` (HR Pro Agent ของ Siam Makro Group)
+- **System prompt ใหม่** (`buildSystemPrompt`): persona "HR Pro Agent", ตอบไทยเสมอ, หน้าที่ open/close/check vacancy,
+  business rules (รับ SM ขึ้นไป, ปฏิเสธ CDC 995/HO 999, ตำแหน่งต้องอยู่ใน list, ยืนยันก่อนปิดเสมอ), ขั้นตอน open/close
+- **Agentic tool-use loop**: `sendChatCore` วนเรียก Claude → ถ้ามี `tool_use` รัน tool → ส่ง `tool_result` กลับ → จน end_turn
+  (guard 6 รอบ, rollback chatHistory ถ้า error) — worker.js เป็น passthrough จึงรองรับ multi-turn tool use
+- **Tools ใหม่ (client-side, ทำงานจากข้อมูลที่โหลดแล้ว — ไม่ต้องสร้าง flow/secret เพิ่ม):**
+  - `resolve_branch(branch_input)` → match `BRANCHES` (ไทย, ตัด "สาขา"), ปฏิเสธ CDC/HO, ไม่พบคืน suggestions
+    หมายเหตุ: ระบบใช้ **name_th เป็น key** (ไม่มี location_code/region/name_en — BRANCHES เป็นชื่อไทยล้วน)
+  - `get_open_vacancies(branch)` → filter vacancies Status=Open ตามสาขา คืน vacancy_list (id/position/branch/count)
+  - `close_vacancies(vacancy_ids)` → reuse logic เดิม (`CLOSE_VACANCY_URL`→`POST_VACANCY_URL`→mock), ClosedBy ให้ flow ประทับ
+  - คง `add_vacancy`/`add_vacancies` (เปิด vacancy) — refactor เป็น tool ที่คืน tool_result + `postVacancy()` helper
+- **Greeting + Quick Reply 4 ปุ่ม** (desktop + mobile) ตามสเปก: 📋 เปิด / ✅ ปิด / 🔍 ตรวจสอบ / 📁 อัปโหลดใบสมัคร
+  (ปุ่มอัปโหลด → เรียก `openCandidateModal()` ตรง ๆ)
+- Smoke test ครอบ tool names + `runTool`/`toolResolveBranch`/`toolGetOpenVacancies`/`toolCloseVacancies`/`normBranch` (ผ่าน)
+- **ไม่แตะ `POSITIONS` array** (26 ตัว) — ต้องตรงกับ Choice ของ SharePoint List; สเปกระบุ "32 ตำแหน่ง" เป็น business list
+  ถ้าต้องการ sync ให้ครบ 32 ต้องยืนยัน Choice values จริงใน SharePoint ก่อน (อย่าเดา)
+
+### ▶️ ถ้าต้องการ resolve_branch แบบเต็ม (location_code/region/name_en) ในอนาคต
+ต้องมี master data สาขา (BranchMaster) ฝั่ง client หรือสร้าง flow `HR_Resolve_Branch` + secret แล้วเปลี่ยน tool เป็นเรียก flow
 
 ## 🐛 Fix: ตำแหน่ง/สาขา ขึ้น "[object Object]"
 - SharePoint คืน `Position`/`Branch` (และอาจ `Status`/candidate fields) เป็น **object** (lookup/choice/MMD เช่น `{Value}`/`{Label}`/`{LookupValue}`) → render ตรง ๆ เป็น `[object Object]`

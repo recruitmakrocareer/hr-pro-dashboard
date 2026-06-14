@@ -472,13 +472,13 @@ tbody tr:hover{background:#F8F7FF}
       </div>
       <div class="chat-messages" id="chat-messages">
         <div class="msg bot">
-          <div class="msg-bubble">สวัสดีครับ! ผม HR Pro Agent พร้อมช่วยงาน Recruitment ครับ 👋<br><br>ลองสั่งงานได้เลยครับ เช่น:</div>
+          <div class="msg-bubble">สวัสดีครับ 🙏 ผม HR Pro ยินดีช่วยเหลือด้านตำแหน่งงานว่างครับ<br><br>วันนี้ต้องการทำอะไรครับ?</div>
         </div>
         <div class="chat-suggestions">
-          <button class="suggest-chip" onclick="sendChat('สรุปตำแหน่งงานที่เปิดรับอยู่')">📊 สรุปตำแหน่งที่เปิดรับอยู่</button>
-          <button class="suggest-chip" onclick="sendChat('มีผู้สมัครใหม่วันนี้กี่คน')">👤 ผู้สมัครใหม่วันนี้</button>
-          <button class="suggest-chip" onclick="sendChat('สาขาไหนขาดคนมากที่สุด')">📍 สาขาที่ขาดคนมากสุด</button>
-          <button class="suggest-chip" onclick="sendChat('สร้างรายงานประจำสัปดาห์')">📝 สร้างรายงานสัปดาห์</button>
+          <button class="suggest-chip" onclick="sendChat('เปิดตำแหน่งงานว่างใหม่')">📋 เปิดตำแหน่งงานว่างใหม่</button>
+          <button class="suggest-chip" onclick="sendChat('ปิดตำแหน่งงานว่าง')">✅ ปิดตำแหน่งงานว่าง</button>
+          <button class="suggest-chip" onclick="sendChat('ตรวจสอบตำแหน่งงานว่าง')">🔍 ตรวจสอบตำแหน่งงานว่าง</button>
+          <button class="suggest-chip" onclick="openCandidateModal()">📁 อัปโหลดใบสมัคร</button>
         </div>
       </div>
       <div class="chat-input-area">
@@ -1389,10 +1389,16 @@ function buildSystemPrompt() {
   const branchSample = BRANCHES.slice(0, 10).join(', ');
   const branchNote = `(มีทั้งหมด ${BRANCHES.length} สาขา เช่น ${branchSample} ฯลฯ)\nใช้ชื่อสาขาตามที่ user พิมพ์มาได้เลย ไม่ต้องแปลง`;
 
-  return `คุณคือ HR Pro Agent ผู้ช่วย HR ของ Siam Makro Group
-ตอบเป็นภาษาไทยเสมอ กระชับ ชัดเจน และเป็นมืออาชีพ
+  return `คุณคือ HR Pro Agent ของ Siam Makro Group ทีม Talent Acquisition
+ตอบกลับเป็นภาษาไทยเสมอ สุภาพ กระชับ และเป็นมืออาชีพ
 
-ข้อมูลปัจจุบันในระบบ (อัปเดต Real-time):
+## หน้าที่หลัก
+- รับแจ้งตำแหน่งงานว่าง (Open Vacancy)
+- ปิดตำแหน่งงานว่าง (Close Vacancy)
+- ตรวจสอบข้อมูล vacancy
+- หากข้อมูลไม่ครบ ให้ถามเพิ่มเติมอย่างสุภาพทีละประเด็น
+
+ข้อมูลปัจจุบันในระบบ (real-time):
 
 📋 ตำแหน่งงานว่าง (${vacancies.length} ตำแหน่ง):
 ${vacancyList || 'ไม่มีข้อมูล'}
@@ -1400,32 +1406,222 @@ ${vacancyList || 'ไม่มีข้อมูล'}
 👤 ผู้สมัคร (${candidates.length} คน):
 ${candidateList || 'ไม่มีข้อมูล'}
 
-⚠️ กฎสำคัญ — ชื่อตำแหน่งและสาขา:
-ห้ามใช้ชื่อย่อหรือคิดชื่อเอง ต้องใช้ชื่อจาก list นี้เท่านั้น
-ถ้า user พิมพ์ชื่อย่อ ให้ match กับชื่อเต็มใน list เช่น:
-- "HR" → "Section Manager-Human Resource"
-- "FM" → "Fresh Manager"
-- "SM-CS" → "Section Manager - Customer Service"
-- "GA" หรือ "SM-GA" → "Section Manager - GA"
-- "ASGM" → "ASGM"
+## 🛠️ เครื่องมือ (tools) และวิธีใช้
+- resolve_branch(branch_input): เรียก "ทุกครั้ง" ที่ผู้ใช้ระบุชื่อ/รหัสสาขา ก่อนทำงานอื่นที่เกี่ยวกับสาขา
+  คืน { found, name_th } — ระบบนี้ใช้ "ชื่อสาขาภาษาไทย" (name_th) เป็น key ในการอ้างอิงสาขา (ไม่มี location_code)
+  ถ้า found=false ให้ถามผู้ใช้ว่าหมายถึงสาขาใด ห้ามเดาหรือสร้างสาขาขึ้นเอง
+- get_open_vacancies(branch): ดึงรายการ vacancy ที่ Status=Open ของสาขานั้น (ใช้ name_th จาก resolve_branch)
+  ต้องเรียก "ก่อนปิด vacancy เสมอ" เพื่อแสดงรายการให้ผู้ใช้ยืนยัน
+- close_vacancies(vacancy_ids): ปิด vacancy หลายรายการ — vacancy_ids ต้องมาจาก output ของ get_open_vacancies เท่านั้น
+  เรียกได้ "หลังผู้ใช้ยืนยันแล้วเท่านั้น" ห้ามเรียกโดยไม่ยืนยัน
+- add_vacancy / add_vacancies: เปิดตำแหน่งงานใหม่ 1 หรือหลายตำแหน่ง
+
+## เปิด vacancy — ข้อมูลที่ต้องการ
+1.สาขา (เรียก resolve_branch) 2.ตำแหน่ง (จาก list) 3.จำนวนอัตรา 4.ความเร่งด่วน (ด่วน/ปกติ) 5.ชื่อผู้แจ้ง
+match ชื่อตำแหน่ง/สาขาให้ตรง list ก่อนเรียก add_vacancy หากข้อมูลไม่ครบใช้ค่า default: Count=1, Status=Open, OpenDate=วันนี้
+
+## ปิด vacancy — ขั้นตอน (ยืนยันก่อนเสมอ)
+1. resolve_branch หา name_th
+2. get_open_vacancies(branch=name_th)
+3. แสดงรายการ + ถามยืนยันก่อนปิดเสมอ
+4. เมื่อผู้ใช้ยืนยัน → close_vacancies(vacancy_ids=[...] จากรายการที่ได้)
+5. ถ้าไม่มี vacancy เปิดอยู่ → แจ้งผู้ใช้ว่า "ไม่มี vacancy ที่เปิดอยู่ในสาขานี้ครับ"
+
+## ⛔ ข้อห้าม / business rules
+- ห้ามรับแจ้งตำแหน่งต่ำกว่า SM (เช่น Supervisor, Staff)
+- ห้ามรับสาขา CDC (995) หรือ HO (999) ทุกกรณี
+- หากตำแหน่งไม่อยู่ใน list ให้แจ้งและขอให้ผู้ใช้ระบุใหม่
+- ห้ามปิด vacancy โดยไม่ยืนยัน
+
+## อัปโหลดใบสมัคร
+ถ้าผู้ใช้ต้องการอัปโหลด CV/ใบสมัคร ให้แนะนำให้กดปุ่ม "📁 อัปโหลดใบสมัคร" หรือเปิดหน้าเพิ่มผู้สมัคร (?action=add-applicant)
+
+⚠️ ชื่อตำแหน่ง/สาขา: ใช้ชื่อจาก list เท่านั้น ห้ามคิดเอง ถ้าผู้ใช้พิมพ์ย่อ ให้ match กับชื่อเต็ม เช่น
+"HR"→"Section Manager-Human Resource", "FM"→"Fresh Manager", "SM-CS"→"Section Manager - Customer Service", "GA"/"SM-GA"→"Section Manager - GA", "ASGM"→"ASGM"
 
 📌 ตำแหน่งงานที่ใช้ได้ (ใช้ชื่อเหล่านี้เท่านั้น):
 - ${positionList}
 
-🏢 สาขา: ${branchNote}
-
-🛠️ เครื่องมือที่คุณใช้ได้:
-- add_vacancy: ใช้เมื่อ user ต้องการเพิ่มตำแหน่งงานใหม่
-
-📌 กฎการใช้ add_vacancy:
-เรียกใช้ทันทีเมื่อ user พูดถึงการ "เพิ่ม", "เปิดรับ", "ต้องการ", "ขาด" ตำแหน่งใดก็ตาม
-ต้อง match ชื่อตำแหน่งและสาขากับ list ด้านบนให้ตรงที่สุดก่อนเรียก tool เสมอ
-หากข้อมูลไม่ครบ ให้ใช้ค่า default: Count=1, Status=Open, OpenDate=วันนี้, Reporter=""
-ห้ามถามข้อมูลเพิ่มเติมก่อนเรียก tool — เรียกทันทีแล้วแจ้ง user ว่าเพิ่มสำเร็จ`;
+🏢 สาขา: ${branchNote}`;
 }
 
 async function sendChat(text) {
   return sendChatCore(text, 'chat-input', 'chat-messages');
+}
+
+// Tool definitions ส่งให้ Claude (ตาม Web Agent Spec) — ทำงานแบบ client-side จากข้อมูลที่โหลดแล้ว
+const AGENT_TOOLS = [
+  {
+    name: 'resolve_branch',
+    description: 'ค้นหา/ยืนยันสาขาจากชื่อหรือรหัสที่ผู้ใช้พิมพ์ ต้องเรียกทุกครั้งที่ผู้ใช้ระบุสาขา คืน { found, name_th }',
+    input_schema: {
+      type: 'object',
+      properties: { branch_input: { type: 'string', description: 'ชื่อ/รหัสสาขาที่ผู้ใช้พิมพ์ เช่น "ลาดพร้าว", "Lardprao", "001"' } },
+      required: ['branch_input']
+    }
+  },
+  {
+    name: 'get_open_vacancies',
+    description: 'ดึงรายการ vacancy ที่ Status=Open ของสาขา (ใช้ name_th จาก resolve_branch) เรียกก่อนปิด vacancy เสมอ',
+    input_schema: {
+      type: 'object',
+      properties: { branch: { type: 'string', description: 'ชื่อสาขาภาษาไทย (name_th) จาก resolve_branch' } },
+      required: ['branch']
+    }
+  },
+  {
+    name: 'close_vacancies',
+    description: 'ปิด vacancy หลายรายการ (Status=Close + ClosedDate) vacancy_ids ต้องมาจาก get_open_vacancies และต้องผู้ใช้ยืนยันก่อน',
+    input_schema: {
+      type: 'object',
+      properties: { vacancy_ids: { type: 'array', items: { type: ['string', 'number'] }, description: 'รายการ id ของ vacancy ที่จะปิด' } },
+      required: ['vacancy_ids']
+    }
+  },
+  {
+    name: 'add_vacancy',
+    description: 'เพิ่มตำแหน่งงานว่าง 1 ตำแหน่ง',
+    input_schema: {
+      type: 'object',
+      properties: {
+        Position: { type: 'string' }, Branch: { type: 'string' }, Count: { type: 'number' },
+        Reporter: { type: 'string' }, Status: { type: 'string' }, OpenDate: { type: 'string' },
+      },
+      required: ['Position', 'Branch']
+    }
+  },
+  {
+    name: 'add_vacancies',
+    description: 'เพิ่มตำแหน่งงานว่างหลายตำแหน่งพร้อมกัน ใช้เมื่อ user ระบุมากกว่า 1 ตำแหน่ง',
+    input_schema: {
+      type: 'object',
+      properties: {
+        vacancies: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              Position: { type: 'string' }, Branch: { type: 'string' }, Count: { type: 'number' },
+              Reporter: { type: 'string' }, Status: { type: 'string' }, OpenDate: { type: 'string' },
+            },
+            required: ['Position', 'Branch']
+          }
+        }
+      },
+      required: ['vacancies']
+    }
+  }
+];
+
+// normalize ชื่อสาขาเพื่อ match (ตัดคำนำหน้า "สาขา", lower-case, trim)
+function normBranch(s) { return (s ?? '').toString().trim().toLowerCase().replace(/^สาขา\s*/, '').trim(); }
+
+// ---- Client-side tool implementations (คืน string JSON เป็น tool_result) ----
+function toolResolveBranch({ branch_input }) {
+  const raw = (branch_input ?? '').toString().trim();
+  const n = normBranch(raw);
+  // ปฏิเสธ CDC (995) / HO (999) ตาม business rule
+  if (/^(995|999|cdc|ho)$/i.test(n) || /cdc|head\s*office|สำนักงานใหญ่/i.test(raw)) {
+    return JSON.stringify({ found: false, rejected: true, message: 'ไม่รองรับสาขา CDC (995) หรือ HO (999)' });
+  }
+  if (!n) return JSON.stringify({ found: false, message: 'กรุณาระบุชื่อหรือรหัสสาขา' });
+  let hit = BRANCHES.find(b => normBranch(b) === n);
+  if (!hit && n.length >= 2) hit = BRANCHES.find(b => normBranch(b).includes(n));
+  if (!hit) {
+    const suggestions = BRANCHES.filter(b => normBranch(b).includes(n)).slice(0, 5);
+    return JSON.stringify({ found: false, message: 'ไม่พบสาขาที่ระบุ', suggestions });
+  }
+  // ระบบนี้ไม่มี location_code mapping → ใช้ name_th (ชื่อสาขาไทย) เป็น key
+  return JSON.stringify({ found: true, name_th: hit, branch: hit, message: `พบสาขา ${hit}` });
+}
+
+function toolGetOpenVacancies({ branch }) {
+  const n = normBranch(branch);
+  const open = vacancies.filter(v =>
+    getVStatus(v) === 'Open' &&
+    (!n || normBranch(getVBranch(v)) === n || normBranch(getVBranch(v)).includes(n)));
+  const vacancy_list = open.map(v => ({
+    id: v.id || v.ID, position: getVTitle(v), branch: getVBranch(v) || '-', count: v.Count || v.Slots || 1
+  }));
+  return JSON.stringify({
+    count: vacancy_list.length, vacancy_list,
+    message: vacancy_list.length ? `พบ ${vacancy_list.length} vacancy ที่เปิดอยู่` : 'ไม่มี vacancy ที่เปิดอยู่ในสาขานี้'
+  });
+}
+
+async function toolCloseVacancies({ vacancy_ids }, containerId) {
+  const ids = (Array.isArray(vacancy_ids) ? vacancy_ids : String(vacancy_ids || '').split(','))
+    .map(x => String(x).trim()).filter(Boolean);
+  if (!ids.length) return JSON.stringify({ success: false, closed_count: 0, message: 'ไม่มี vacancy_ids' });
+  appendMsg('bot', `⏳ กำลังปิด ${ids.length} vacancy...`, containerId);
+  const today = new Date().toISOString().split('T')[0];
+  // ClosedBy ปล่อยให้ flow ประทับจากผู้ใช้ของ SharePoint connection (เว็บยังไม่มี login)
+  const url = CONFIG.CLOSE_VACANCY_URL || CONFIG.POST_VACANCY_URL;
+  let ok = 0; const errors = [];
+  for (const id of ids) {
+    try {
+      if (url) {
+        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: parseInt(id, 10), Status: 'Close', ClosedDate: today }) });
+        if (!res.ok) { errors.push(`${id}: HTTP ${res.status}`); continue; }
+      } else {
+        const idx = vacancies.findIndex(v => (v.id || v.ID) == id);
+        if (idx >= 0) vacancies[idx] = { ...vacancies[idx], Status: 'Close', CloseDate: today };
+      }
+      ok++;
+    } catch (e) { errors.push(`${id}: ${e.message}`); }
+  }
+  if (url) await loadVacancies(); else { renderVacancies(); updateKPI(); }
+  return JSON.stringify({
+    success: ok > 0, closed_count: ok, errors,
+    message: `ปิด vacancy เรียบร้อย ${ok} รายการ${errors.length ? ` (ล้มเหลว ${errors.length} รายการ)` : ''}`
+  });
+}
+
+async function postVacancy(item) {
+  const today = new Date().toISOString().split('T')[0];
+  const payload = {
+    id: null, Position: item.Position, Branch: item.Branch, Count: item.Count || 1,
+    Reporter: item.Reporter || '', Status: item.Status || 'Open', OpenDate: item.OpenDate || today,
+  };
+  if (CONFIG.POST_VACANCY_URL) {
+    const res = await fetch(CONFIG.POST_VACANCY_URL, { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  }
+}
+
+async function toolAddVacancy(inp, containerId) {
+  appendMsg('bot', `⏳ กำลังเพิ่มตำแหน่ง ${inp.Position} สาขา ${inp.Branch}...`, containerId);
+  try {
+    await postVacancy(inp);
+    await loadVacancies();
+    return JSON.stringify({ success: true, message: `เพิ่มตำแหน่ง ${inp.Position} สาขา ${inp.Branch} เรียบร้อย` });
+  } catch (e) { return JSON.stringify({ success: false, message: e.message }); }
+}
+
+async function toolAddVacancies(inp, containerId) {
+  const items = inp.vacancies || [];
+  appendMsg('bot', `⏳ กำลังเพิ่ม ${items.length} ตำแหน่ง...`, containerId);
+  let ok = 0; const errors = [];
+  for (const item of items) {
+    try { await postVacancy(item); ok++; } catch (e) { errors.push(`${item.Position}: ${e.message}`); }
+  }
+  await loadVacancies();
+  return JSON.stringify({ success: ok > 0, added_count: ok, errors,
+    message: `เพิ่มเรียบร้อย ${ok}/${items.length} ตำแหน่ง${errors.length ? ` (ล้มเหลว ${errors.length})` : ''}` });
+}
+
+async function runTool(tu, containerId) {
+  const inp = tu.input || {};
+  switch (tu.name) {
+    case 'resolve_branch':     return toolResolveBranch(inp);
+    case 'get_open_vacancies': return toolGetOpenVacancies(inp);
+    case 'close_vacancies':    return await toolCloseVacancies(inp, containerId);
+    case 'add_vacancy':        return await toolAddVacancy(inp, containerId);
+    case 'add_vacancies':      return await toolAddVacancies(inp, containerId);
+    default:                   return JSON.stringify({ error: `unknown tool: ${tu.name}` });
+  }
 }
 
 async function sendChatCore(text, inputId, containerId) {
@@ -1435,133 +1631,50 @@ async function sendChatCore(text, inputId, containerId) {
   input.value = '';
 
   appendMsg('user', msg, containerId);
+  const historyMark = chatHistory.length;        // ไว้ rollback ถ้า error
   chatHistory.push({ role: 'user', content: msg });
   const typingId = showTyping(containerId);
 
   try {
-    const res = await fetch(CONFIG.PROXY_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1000,
-        system: buildSystemPrompt(),
-        messages: chatHistory,
-
-        tools: [
-          {
-            name: 'add_vacancy',
-            description: 'เพิ่มตำแหน่งงานว่าง 1 ตำแหน่ง',
-            input_schema: {
-              type: 'object',
-              properties: {
-                Position: { type: 'string' },
-                Branch:   { type: 'string' },
-                Count:    { type: 'number' },
-                Reporter: { type: 'string' },
-                Status:   { type: 'string' },
-                OpenDate: { type: 'string' },
-              },
-              required: ['Position', 'Branch']
-            }
-          },
-          {
-            name: 'add_vacancies',
-            description: 'เพิ่มตำแหน่งงานว่างหลายตำแหน่งพร้อมกัน ใช้เมื่อ user ระบุมากกว่า 1 ตำแหน่ง',
-            input_schema: {
-              type: 'object',
-              properties: {
-                vacancies: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      Position: { type: 'string' },
-                      Branch:   { type: 'string' },
-                      Count:    { type: 'number' },
-                      Reporter: { type: 'string' },
-                      Status:   { type: 'string' },
-                      OpenDate: { type: 'string' },
-                    },
-                    required: ['Position', 'Branch']
-                  }
-                }
-              },
-              required: ['vacancies']
-            }
-          }
-        ]
-      })
-    });
-
-    const data = await res.json();
-
-    const toolUse = data.content?.find(c => c.type === 'tool_use');
-
-    if (toolUse && toolUse.name === 'add_vacancy') {
-      removeTyping(typingId);
-
-      appendMsg('bot', `⏳ กำลังเพิ่มตำแหน่ง **${toolUse.input.Position}** สาขา ${toolUse.input.Branch}...`, containerId);
-
-      const today = new Date().toISOString().split('T')[0];
-      const payload = {
-        id: null,
-        Position: toolUse.input.Position,
-        Branch: toolUse.input.Branch,
-        Count: toolUse.input.Count || 1,
-        Reporter: toolUse.input.Reporter || '',
-        Status: toolUse.input.Status || 'Open',
-        OpenDate: toolUse.input.OpenDate || today,
-      };
-
-      await fetch(CONFIG.POST_VACANCY_URL, {
+    // Agentic loop: เรียก Claude → ถ้ามี tool_use ให้รัน tool แล้วส่ง tool_result กลับ → วนจน end_turn
+    for (let guard = 0; guard < 6; guard++) {
+      const res = await fetch(CONFIG.PROXY_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 1000,
+          system: buildSystemPrompt(),
+          messages: chatHistory,
+          tools: AGENT_TOOLS,
+        })
       });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
 
-      await loadVacancies();
-      const replyText1 = `✅ เพิ่มตำแหน่ง ${toolUse.input.Position} สาขา ${toolUse.input.Branch} เรียบร้อยแล้วครับ`;
-      appendMsg('bot', replyText1, containerId);
-      chatHistory.push({ role: 'assistant', content: replyText1 });
+      const content = data.content || [];
+      chatHistory.push({ role: 'assistant', content });
 
-    } else if (toolUse && toolUse.name === 'add_vacancies') {
-      removeTyping(typingId);
-      const items = toolUse.input.vacancies || [];
-      const today = new Date().toISOString().split('T')[0];
-      appendMsg('bot', `⏳ กำลังเพิ่ม ${items.length} ตำแหน่ง...`, containerId);
-      for (const item of items) {
-        await fetch(CONFIG.POST_VACANCY_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: null,
-            Position: item.Position,
-            Branch: item.Branch,
-            Count: item.Count || 1,
-            Reporter: item.Reporter || '',
-            Status: item.Status || 'Open',
-            OpenDate: item.OpenDate || today,
-          })
-        });
+      const textOut = content.filter(c => c.type === 'text').map(c => c.text).join('\n').trim();
+      const toolUses = content.filter(c => c.type === 'tool_use');
+
+      if (textOut) appendMsg('bot', textOut, containerId);
+
+      if (!toolUses.length) { removeTyping(typingId); return; }
+
+      // รัน tool ทั้งหมดแล้วส่ง tool_result กลับเป็น message ของ user
+      const toolResults = [];
+      for (const tu of toolUses) {
+        const result = await runTool(tu, containerId);
+        toolResults.push({ type: 'tool_result', tool_use_id: tu.id, content: result });
       }
-      await loadVacancies();
-      const summary = items.map(i => `• ${i.Position} — ${i.Branch}`).join('\n');
-      const replyText2 = `✅ เพิ่มครบ ${items.length} ตำแหน่งเรียบร้อยแล้วครับ\n\n${summary}`;
-      appendMsg('bot', replyText2, containerId);
-      chatHistory.push({ role: 'assistant', content: replyText2 });
-
-    } else {
-      const reply = data.content?.find(c => c.type === 'text')?.text || 'ขออภัยครับ ไม่สามารถรับคำตอบได้';
-      removeTyping(typingId);
-      appendMsg('bot', reply, containerId);
-      chatHistory.push({ role: 'assistant', content: reply });
+      chatHistory.push({ role: 'user', content: toolResults });
     }
-
+    removeTyping(typingId);
   } catch (e) {
     removeTyping(typingId);
     appendMsg('bot', 'Error: ' + e.message, containerId);
-    chatHistory.pop();
+    chatHistory.length = historyMark;            // rollback turn ที่ค้าง
   }
 }
 
@@ -1640,11 +1753,12 @@ function showToast(msg) {
       <div><div class="chat-title">HR Pro Agent</div><div class="chat-subtitle">Powered by Claude AI</div></div>
     </div>
     <div class="chat-messages" id="chat-messages-mobile">
-      <div class="msg bot"><div class="msg-bubble">สวัสดีครับ! ผม HR Pro พร้อมช่วยงานครับ 👋</div></div>
+      <div class="msg bot"><div class="msg-bubble">สวัสดีครับ 🙏 ผม HR Pro ยินดีช่วยเหลือด้านตำแหน่งงานว่างครับ<br><br>วันนี้ต้องการทำอะไรครับ?</div></div>
       <div class="chat-suggestions">
-        <button class="suggest-chip" onclick="sendChatMobile('สรุปตำแหน่งที่เปิดรับอยู่')">📊 สรุปตำแหน่งที่เปิดรับ</button>
-        <button class="suggest-chip" onclick="sendChatMobile('มีผู้สมัครใหม่วันนี้กี่คน')">👤 ผู้สมัครใหม่วันนี้</button>
-        <button class="suggest-chip" onclick="sendChatMobile('สาขาไหนขาดคนมากที่สุด')">📍 สาขาขาดคนมากสุด</button>
+        <button class="suggest-chip" onclick="sendChatMobile('เปิดตำแหน่งงานว่างใหม่')">📋 เปิดตำแหน่งงานว่างใหม่</button>
+        <button class="suggest-chip" onclick="sendChatMobile('ปิดตำแหน่งงานว่าง')">✅ ปิดตำแหน่งงานว่าง</button>
+        <button class="suggest-chip" onclick="sendChatMobile('ตรวจสอบตำแหน่งงานว่าง')">🔍 ตรวจสอบตำแหน่งงานว่าง</button>
+        <button class="suggest-chip" onclick="openCandidateModal()">📁 อัปโหลดใบสมัคร</button>
       </div>
     </div>
     <div class="chat-input-area">
