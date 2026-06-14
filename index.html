@@ -697,6 +697,9 @@ const CONFIG = {
   // Flow: HR_CLOSE_Vacancy (FL-01) — ปิดตำแหน่งงาน + บันทึก Status='Close' / ClosedDate / ClosedBy
   // ถ้า secret ยังไม่ถูกตั้ง → ว่าง → closeVacancy() จะ fallback ไปใช้ POST_VACANCY_URL (ตั้ง Status ได้อยู่แล้ว)
   CLOSE_VACANCY_URL:  '',
+  // Flow: GET BranchMaster — คืนรายการสาขา (LocationCode/NameTH/NameEN/Region/AreaHR/...) สำหรับ lookup Area HR
+  // optional — ถ้ายังไม่ตั้ง secret คอลัมน์ Area HR จะแสดง '-'
+  GET_BRANCHMASTER_URL: '',
   COPILOT_IFRAME_URL: '',  // Copilot Studio embed URL
   CLAUDE_API_KEY: '',
   PROXY_URL: 'https://hr-pro-claude-proxy.oonllos.workers.dev',
@@ -713,6 +716,7 @@ console.log('[CONFIG] URLs present?', {
   GET_CANDIDATES_URL: !!CONFIG.GET_CANDIDATES_URL,
   POST_CANDIDATE_URL: !!CONFIG.POST_CANDIDATE_URL,
   CLOSE_VACANCY_URL: !!CONFIG.CLOSE_VACANCY_URL,
+  GET_BRANCHMASTER_URL: !!CONFIG.GET_BRANCHMASTER_URL,
   PROXY_URL: !!CONFIG.PROXY_URL,
 });
 
@@ -771,6 +775,7 @@ const BRANCHES = [
 let vacancies = [];
 let candidates = [];
 let editVacancyId = null;
+let branchInfo = {};   // map: normBranch(NameTH) → { areaHR, region, nameTH, locationCode } จาก BranchMaster
 
 // ===================== MOCK DATA (ใช้ตอน Flow ยังไม่พร้อม) =====================
 const MOCK_VACANCIES = [
@@ -827,8 +832,9 @@ document.addEventListener('DOMContentLoaded', () => {
   populateDropdowns();
   makeSearchableSelect('v-branch', 'สาขา');
   makeSearchableSelect('v-title', 'ตำแหน่ง');
-  // loadVacancies ก่อน แล้วค่อยเช็ก URL action — dropdown ผู้สมัครอ่านจาก vacancies จึงต้องโหลดเสร็จก่อน pre-select
-  loadVacancies().then(handleUrlAction);
+  // โหลด BranchMaster ก่อน (map Area HR/Region) แล้วค่อย loadVacancies เพื่อให้ render ครั้งแรกมี Area HR ครบ
+  // loadVacancies ก่อน handleUrlAction — dropdown ผู้สมัครอ่านจาก vacancies จึงต้องโหลดเสร็จก่อน pre-select
+  loadBranchMaster().finally(() => loadVacancies().then(handleUrlAction));
   loadCandidates();
 });
 
@@ -846,6 +852,31 @@ function handleUrlAction() {
 }
 
 // ===================== LOAD DATA =====================
+// โหลด BranchMaster (optional) → สร้าง map normBranch(NameTH) → { areaHR, region } สำหรับ lookup Area HR/Region ตามสาขา
+async function loadBranchMaster() {
+  if (!CONFIG.GET_BRANCHMASTER_URL) return;
+  try {
+    const res = await fetch(CONFIG.GET_BRANCHMASTER_URL, {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({})
+    });
+    if (!res.ok) { console.error('[loadBranchMaster] HTTP', res.status); return; }
+    const data = await res.json();
+    const items = data.value || [];
+    const map = {};
+    for (const b of items) {
+      const nameTH = fieldText(b.NameTH) || fieldText(b.NameTh);
+      const code   = fieldText(b.Title) || fieldText(b.LocationCode);  // Title = LocationCode ใน BranchMaster
+      const areaHR = fieldText(b.AreaHR) || fieldText(b['Area HR']) || fieldText(b.AreaHRName) || fieldText(b.Area_HR);
+      const region = fieldText(b.Region);
+      const rec = { areaHR, region, nameTH, locationCode: code };
+      if (nameTH) map[normBranch(nameTH)] = rec;        // คีย์หลัก: ชื่อสาขาไทย (ตรงกับ JobVacancy.Branch)
+      if (code)   map['#' + code.toLowerCase()] = rec;  // คีย์สำรอง: location code
+    }
+    branchInfo = map;
+    console.log('[loadBranchMaster] โหลด', items.length, 'สาขา → map', Object.keys(map).length, 'คีย์ | first keys:', Object.keys(items[0] || {}));
+  } catch(e) { console.error('[loadBranchMaster] error:', e); }
+}
+
 async function loadVacancies() {
   try {
     if (CONFIG.GET_VACANCIES_URL) {
@@ -944,12 +975,16 @@ function getVStatus(v) {
 }
 function getVTitle(v)  { return fieldText(v.Position) || fieldText(v.Title) || '-'; }
 function getVBranch(v) { return fieldText(v.Branch); }
-function getVRegion(v) { return fieldText(v.Region) || fieldText(v.region); }
-// Area HR อยู่ใน BranchMaster ตามสเปก — แต่ถ้า JobVacancy import มาด้วยก็อ่านจาก item (ลองหลายชื่อ field)
+function getVRegion(v) {
+  return fieldText(v.Region) || fieldText(v.region) || (branchOf(v).region || '');
+}
+// Area HR อยู่ใน BranchMaster — อ่านจาก item ก่อน (เผื่อ JobVacancy import มาด้วย) ไม่งั้น lookup จาก BranchMaster ตามสาขา
 function getVAreaHR(v) {
   return fieldText(v.AreaHR) || fieldText(v['Area HR']) || fieldText(v.AreaHRName) ||
-         fieldText(v.Area_HR) || fieldText(v.AreaHr) || fieldText(v.Area);
+         fieldText(v.Area_HR) || fieldText(v.AreaHr) || (branchOf(v).areaHR || '');
 }
+// หา record ของสาขาจาก BranchMaster ตามชื่อสาขาของ vacancy (ทน prefix "สาขา")
+function branchOf(v) { return branchInfo[normBranch(getVBranch(v))] || {}; }
 // แถวว่างจาก SharePoint (ไม่มีทั้งตำแหน่งและสาขา) → ไม่ต้องแสดง/ไม่นับ KPI
 function isEmptyVacancy(v) {
   return !(fieldText(v.Position) || fieldText(v.Title)) && !getVBranch(v);
