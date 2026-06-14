@@ -34,7 +34,7 @@ scripts.forEach((code, i) => {
 
 console.log('2) Element IDs ที่จำเป็นต้องมีใน DOM');
 const requiredIds = [
-  'page-dashboard', 'page-vacancy', 'page-candidate', 'page-chat',
+  'page-dashboard', 'page-candidate', 'page-chat',
   'vacancy-tbody', 'candidate-grid', 'candidate-modal', 'vacancy-modal',
   'cv-file', 'upload-zone', 'chat-input', 'chat-input-mobile',
   'c-first', 'c-last', 'c-vacancy', 'c-status', 'kpi-total',
