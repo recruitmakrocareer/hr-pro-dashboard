@@ -37,6 +37,40 @@
   - `deploy.yml` fail-loud ถ้า secret หาย + พิมพ์สถานะ OK/MISSING + `workflow_dispatch`
   - Smoke Test + CI
 
+## 🆕 ทำเพิ่มใน session นี้ (Close Vacancy — client + plumbing)
+- เพิ่มปุ่ม **🔒 ปิดตำแหน่งงาน** ในโมดัลแก้ไขตำแหน่ง (โชว์เฉพาะตำแหน่งเดิมที่ยัง "ไม่ปิด" เท่านั้น)
+- ฟังก์ชัน `closeVacancy()` — ยืนยันก่อนปิด → POST `{ id, Status:'Close', ClosedDate }` แล้ว reload
+  - ใช้ flow `CLOSE_VACANCY_URL` (ใหม่) ถ้ามี; **ถ้ายังไม่ตั้ง secret → fallback ไป `POST_VACANCY_URL`** (set Status ได้อยู่แล้ว) → ใช้งานได้ทันทีแบบ degrade
+  - ไม่มี secret/flow เลย → mock update (set Status=Close ในหน่วยความจำ)
+  - `ClosedBy` ตั้งใจไม่ส่งจาก client (เว็บไม่มี login) → ให้ flow ประทับจากผู้ใช้ของ SharePoint connection
+- เพิ่ม `CONFIG.CLOSE_VACANCY_URL` + log สถานะ + inject ใน `deploy.yml` (เป็น **optional** ไม่อยู่ใน required → ไม่ทำ deploy fail ถ้ายังไม่ตั้ง)
+- `renderVacancies()` อ่านวันที่ปิดทน `ClosedDate || CloseDate`
+- Smoke test ครอบ `closeVacancy` + `CONFIG.CLOSE_VACANCY_URL` แล้ว (ผ่าน)
+
+### ▶️ สิ่งที่ผู้ใช้ต้องทำต่อ เพื่อให้ Close Vacancy บันทึก ClosedDate/ClosedBy ลง SharePoint
+1. **SP-01–03:** เพิ่ม column ใน List `JobVacancy`: `Status` (มีแล้ว?), `ClosedDate` (Date), `ClosedBy` (Person หรือ Text)
+2. **FL-01:** สร้าง flow `HR_CLOSE_Vacancy` (HTTP request trigger) — รับ `{ id, Status, ClosedDate }` → Update item ตาม `id` → ตั้ง `ClosedDate` และประทับ `ClosedBy` จากผู้ใช้ → คืน 200
+3. เอา HTTP POST URL จาก trigger ของ flow มาตั้ง **Repository secret** `CLOSE_VACANCY_URL` แล้ว merge เข้า `main` (re-deploy)
+   - ก่อนตั้ง secret: ปิดตำแหน่งยัง work ผ่าน `POST_VACANCY_URL` (แต่จะไม่ได้ ClosedDate/ClosedBy เว้นแต่ flow POST เดิม map ให้)
+
+## 🆕 ทำเพิ่ม (Copilot Agent → Dashboard deep-link, จาก Developer Task List)
+- **Task 1 (HIGH):** `?action=add-applicant` → เปิด modal "เพิ่มผู้สมัครใหม่" อัตโนมัติตอนโหลด (`handleUrlAction()` เรียกหลัง `loadVacancies()` เสร็จ)
+- **Task 2-4:** pre-select ตำแหน่งใน dropdown "ตำแหน่งที่สมัคร" (ไม่เพิ่ม UI ตามที่ตกลง) ผ่าน `matchVacancyId()`:
+  - `vacancy=<id>` → เลือก vacancy นั้นตรง ๆ (precedence สูงสุด)
+  - `position=<ชื่อตำแหน่ง>` + `branch=<ชื่อสาขาไทย>` → หา open vacancy ที่ตรงทั้งคู่
+  - `position` เดี่ยว → ตัวแรกที่ตรง; ไม่ตรง/ไม่ส่ง → ปล่อยว่าง
+  - **branch param เป็นชื่อสาขาภาษาไทย** (ไม่ใช่ location_code "001") — ตกลงกับผู้ใช้แล้ว
+  - พิจารณาเฉพาะ vacancy ที่ Open (dropdown แสดงเฉพาะที่เปิด)
+- URLSearchParams decode `%26`→`&`, `+`→space, Thai % ให้อัตโนมัติ → match ตรง POSITIONS/Branch
+- Adaptive Card JSON (ฝั่ง Copilot Studio) ใช้ `Action.OpenUrl` ไป `.../?action=add-applicant[&branch=&position=]` — เป็นงานฝั่ง Agent (ไม่ใช่ code repo นี้)
+- Smoke test ครอบ `handleUrlAction` / `matchVacancyId` / `openCandidateModal` แล้ว
+
+## 🐛 Fix: ตำแหน่ง/สาขา ขึ้น "[object Object]"
+- SharePoint คืน `Position`/`Branch` (และอาจ `Status`/candidate fields) เป็น **object** (lookup/choice/MMD เช่น `{Value}`/`{Label}`/`{LookupValue}`) → render ตรง ๆ เป็น `[object Object]`
+- เพิ่ม helper `fieldText(val)` ดึง string จาก object ทน ๆ + `getVBranch(v)` และให้ `getVStatus/getVTitle` ใช้ `fieldText`
+- ใช้ `getVTitle/getVBranch/fieldText` ทุกจุดที่อ่านเป็นข้อความ: ตารางตำแหน่ง, filter สาขา, dropdown ผู้สมัคร, `matchVacancyId`, ฟอร์มแก้ไข, การ์ดผู้สมัคร, system prompt
+- object ที่ไม่รู้จัก key → คืน `''` (ดีกว่าโชว์ `[object Object]`); ถ้าเจอ blank ให้ดู console `loadVacancies` "First item" หา key จริงแล้วเพิ่มใน `fieldText`
+
 ## 🔧 งานที่เหลือ / ต้องเช็กต่อ
 1. **CV ของผู้สมัครจริง** — ถ้ามี CV แต่ขึ้น "ยังไม่มี CV" → ดู console `[loadCandidates] first item keys: [...]` หาชื่อคอลัมน์ CV จริง แล้วเพิ่มชื่อนั้นใน `cvLinkOf()` (`index.html`)
 2. **บันทึกผู้สมัคร (POST New Candidate)** — ยังไม่ได้ทดสอบว่า save เข้า SharePoint จริง; อาจติด stale URL เหมือน GET → ถ้า save 400 ให้เอา URL ปัจจุบันมาอัปเดต `POST_CANDIDATE_URL`

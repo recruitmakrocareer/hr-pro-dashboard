@@ -597,6 +597,7 @@ tbody tr:hover{background:#F8F7FF}
       </div>
     </div>
     <div class="modal-footer">
+      <button class="btn btn-danger" id="v-close-btn" onclick="closeVacancy()" style="display:none;margin-right:auto">🔒 ปิดตำแหน่งงาน</button>
       <button class="btn" onclick="closeModal('vacancy-modal')">ยกเลิก</button>
       <button class="btn btn-primary" onclick="saveVacancy()">💾 บันทึก</button>
     </div>
@@ -678,6 +679,9 @@ const CONFIG = {
   // Flow: POST New Candidate — เขียนลง List `Candidates` โครงใหม่ (Title/Email/Phone/VacancyID/VacancyTitle/CandidateStatus/CVLink)
   // ตัดสินใจ 12/06/2026: หน้าเว็บอ่านโครงใหม่อยู่แล้ว จึงไม่แก้ Flow — คอลัมน์โครงเก่า (FirstName/LastName/ResumeURL ฯลฯ) ไม่ถูกใช้ ลบจาก List ได้
   POST_CANDIDATE_URL: '__POST_CANDIDATE_URL__',
+  // Flow: HR_CLOSE_Vacancy (FL-01) — ปิดตำแหน่งงาน + บันทึก Status='Close' / ClosedDate / ClosedBy
+  // ถ้า secret ยังไม่ถูกตั้ง → ว่าง → closeVacancy() จะ fallback ไปใช้ POST_VACANCY_URL (ตั้ง Status ได้อยู่แล้ว)
+  CLOSE_VACANCY_URL:  '__CLOSE_VACANCY_URL__',
   COPILOT_IFRAME_URL: '',  // Copilot Studio embed URL
   CLAUDE_API_KEY: '__CLAUDE_API_KEY__',
   PROXY_URL: 'https://hr-pro-claude-proxy.oonllos.workers.dev',
@@ -693,6 +697,7 @@ console.log('[CONFIG] URLs present?', {
   POST_VACANCY_URL: !!CONFIG.POST_VACANCY_URL,
   GET_CANDIDATES_URL: !!CONFIG.GET_CANDIDATES_URL,
   POST_CANDIDATE_URL: !!CONFIG.POST_CANDIDATE_URL,
+  CLOSE_VACANCY_URL: !!CONFIG.CLOSE_VACANCY_URL,
   PROXY_URL: !!CONFIG.PROXY_URL,
 });
 
@@ -807,9 +812,23 @@ document.addEventListener('DOMContentLoaded', () => {
   populateDropdowns();
   makeSearchableSelect('v-branch', 'สาขา');
   makeSearchableSelect('v-title', 'ตำแหน่ง');
-  loadVacancies();
+  // loadVacancies ก่อน แล้วค่อยเช็ก URL action — dropdown ผู้สมัครอ่านจาก vacancies จึงต้องโหลดเสร็จก่อน pre-select
+  loadVacancies().then(handleUrlAction);
   loadCandidates();
 });
+
+// Copilot Agent ส่ง user มาที่ Dashboard ด้วย ?action=add-applicant (+ branch/position/vacancy optional)
+// → เปิด modal เพิ่มผู้สมัครอัตโนมัติ + pre-select vacancy ที่ตรง (เรียกหลัง loadVacancies() เสร็จ)
+function handleUrlAction() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('action') === 'add-applicant') {
+    openCandidateModal({
+      branch:   params.get('branch')   || '',
+      position: params.get('position') || '',
+      vacancy:  params.get('vacancy')  || '',
+    });
+  }
+}
 
 // ===================== LOAD DATA =====================
 async function loadVacancies() {
@@ -886,18 +905,25 @@ async function loadCandidates() {
 }
 
 // ===================== KPI =====================
-function getVStatus(v) {
-  let s = v.Status || v.status || '';
-  if (typeof s === 'object') {
-    s = s.Value || s.Label || s.value || s.label || '';
+// SharePoint อาจคืน field เป็น object (lookup/choice/person/managed metadata) เช่น {Value}/{Label}/{DisplayName}
+// → ดึงเป็น string ให้ทน (ไม่งั้น render เป็น "[object Object]")
+function fieldText(val) {
+  if (val == null) return '';
+  if (typeof val === 'object') {
+    return (val.Value ?? val.Label ?? val.value ?? val.label ??
+            val.DisplayName ?? val.Title ?? val.LookupValue ?? '').toString().trim();
   }
-  s = s.toString().trim();
+  return val.toString().trim();
+}
+function getVStatus(v) {
+  let s = fieldText(v.Status ?? v.status);
   if (s.toLowerCase() === 'open') return 'Open';
   if (s.toLowerCase() === 'close' || s.toLowerCase() === 'closed') return 'Close';
   if (s.toLowerCase() === 'hold') return 'Hold';
   return s || 'Hold';
 }
-function getVTitle(v)  { return v.Position || v.Title || '-'; }
+function getVTitle(v)  { return fieldText(v.Position) || fieldText(v.Title) || '-'; }
+function getVBranch(v) { return fieldText(v.Branch); }
 
 function updateKPI() {
   document.getElementById('kpi-total').textContent = vacancies.length;
@@ -930,10 +956,10 @@ function renderVacancies(data) {
         ? `<span class="badge badge-close">ปิดแล้ว</span>`
         : `<span class="badge badge-hold">Hold</span>`;
       const date = (v.Created||v.OpenDate||'').split('T')[0] || '-';
-      const closeDate = v.CloseDate ? v.CloseDate.split('T')[0] : '-';
+      const closeDate = (v.ClosedDate || v.CloseDate || '').split('T')[0] || '-';
       return `<tr onclick="editVacancy(${v.id||v.ID})">
         <td class="col-title">${getVTitle(v)}</td>
-        <td>${v.Branch||'-'}</td>
+        <td>${getVBranch(v)||'-'}</td>
         <td>${badge}</td>
         <td style="text-align:center">${v.Count||v.Slots||1}</td>
         <td>${v.Reporter||v.Recruiter||v.RecruiterName||'-'}</td>
@@ -953,7 +979,7 @@ function applyFilter() {
   const search = document.getElementById('filter-search').value.toLowerCase();
   const filtered = vacancies.filter(v =>
     (!status || getVStatus(v)===status) &&
-    (!branch || v.Branch===branch) &&
+    (!branch || getVBranch(v)===branch) &&
     (!search || getVTitle(v).toLowerCase().includes(search))
   );
   renderVacancies(filtered);
@@ -985,22 +1011,26 @@ function renderCandidates() {
   }
   const statusColor = {New:'badge-hold',Screening:'badge-hold',Interview:'badge-open',Offer:'badge-open',Pass:'badge-open',Fail:'badge-close'};
   grid.innerHTML = candidates.map(c => {
-    const initials = (c.Title||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    // SharePoint อาจคืนชื่อ/ตำแหน่งเป็น object → ใช้ fieldText ให้ทน (กัน "[object Object]")
+    const cName = fieldText(c.Title) || '-';
+    const cPos = fieldText(c.VacancyTitle) || 'ไม่ระบุตำแหน่ง';
+    const cStatus = fieldText(c.CandidateStatus) || 'New';
+    const initials = (cName !== '-' ? cName : '?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
     const cv = cvLinkOf(c);
     return `<div class="candidate-card">
       <div class="candidate-header">
         <div class="candidate-avatar">${initials}</div>
         <div>
-          <div class="candidate-name">${c.Title||'-'}</div>
-          <div class="candidate-pos">${c.VacancyTitle||'ไม่ระบุตำแหน่ง'}</div>
+          <div class="candidate-name">${cName}</div>
+          <div class="candidate-pos">${cPos}</div>
         </div>
       </div>
       <div class="candidate-meta">
-        <span>📧 ${c.Email||'-'}</span>
-        <span>📱 ${c.Phone||'-'}</span>
+        <span>📧 ${fieldText(c.Email)||'-'}</span>
+        <span>📱 ${fieldText(c.Phone)||'-'}</span>
       </div>
       <div class="candidate-footer">
-        <span class="badge ${statusColor[c.CandidateStatus]||'badge-hold'}">${c.CandidateStatus||'New'}</span>
+        <span class="badge ${statusColor[cStatus]||'badge-hold'}">${cStatus}</span>
         ${cv?`<a class="cv-link" href="${cv}" target="_blank">📄 ดู CV</a>`:`<span style="font-size:12px;color:var(--text-3)">ยังไม่มี CV</span>`}
       </div>
     </div>`;
@@ -1018,6 +1048,7 @@ function openVacancyModal(v) {
   });
   document.getElementById('v-status').value = 'Open';
   document.getElementById('v-slots').value = 1;
+  document.getElementById('v-close-btn').style.display = 'none';  // ตำแหน่งใหม่ยังปิดไม่ได้
   openModal('vacancy-modal');
 }
 
@@ -1027,13 +1058,15 @@ function editVacancy(id) {
   editVacancyId = v.ID || v.id;
   document.getElementById('v-id').value = editVacancyId;
   document.getElementById('vacancy-modal-title').textContent = 'แก้ไขตำแหน่งงาน';
-  document.getElementById('v-title').value = v.Position || v.Title || '';
-  document.getElementById('v-branch').value = v.Branch || '';
+  document.getElementById('v-title').value = fieldText(v.Position) || fieldText(v.Title) || '';
+  document.getElementById('v-branch').value = getVBranch(v);
   document.getElementById('v-status').value = getVStatus(v) || 'Open';
   document.getElementById('v-slots').value = v.Count || v.Slots || 1;
   document.getElementById('v-recruiter').value = v.Reporter || v.Recruiter || v.RecruiterName || '';
   document.getElementById('v-opendate').value = (v.OpenDate||'').split('T')[0];
   document.getElementById('v-notes').value = v.Notes || '';
+  // ปุ่มปิดตำแหน่ง: โชว์เฉพาะตำแหน่งเดิมที่ยังไม่ถูกปิด (กันปิดซ้ำ)
+  document.getElementById('v-close-btn').style.display = getVStatus(v) === 'Close' ? 'none' : '';
   openModal('vacancy-modal');
 }
 
@@ -1071,15 +1104,76 @@ async function saveVacancy() {
   } catch(e) { alert('เกิดข้อผิดพลาด กรุณาลองใหม่'); }
 }
 
+// ปิดตำแหน่งงาน (Close Vacancy) — ตั้ง Status='Close' + บันทึก ClosedDate
+// ใช้ flow เฉพาะ HR_CLOSE_Vacancy (CLOSE_VACANCY_URL) ถ้ามี — ไม่งั้น fallback ไป POST_VACANCY_URL (ตั้ง Status ได้อยู่แล้ว)
+async function closeVacancy() {
+  const spId = document.getElementById('v-id').value;
+  if (!spId) { alert('ต้องบันทึกตำแหน่งงานก่อน จึงจะปิดได้'); return; }
+  const title = document.getElementById('v-title').value || 'ตำแหน่งนี้';
+  if (!confirm(`ยืนยันปิดตำแหน่ง "${title}" ?\nสถานะจะเปลี่ยนเป็น "ปิดแล้ว" และบันทึกวันที่ปิด`)) return;
+
+  const today = new Date().toISOString().split('T')[0];
+  // ClosedBy ปล่อยให้ flow ประทับจากผู้ใช้ของ SharePoint connection (หน้าเว็บยังไม่มีระบบ login)
+  const payload = { id: parseInt(spId, 10), Status: 'Close', ClosedDate: today };
+  const url = CONFIG.CLOSE_VACANCY_URL || CONFIG.POST_VACANCY_URL;
+  const btn = document.getElementById('v-close-btn');
+  btn.disabled = true; btn.textContent = '⏳ กำลังปิด...';
+  try {
+    if (url) {
+      const res = await fetch(url, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      const raw = await res.text();
+      if (!res.ok) {
+        console.error('[closeVacancy] server response:', res.status, raw.slice(0,300));
+        throw new Error(`HTTP ${res.status} — ${raw.slice(0,150) || 'ไม่มีรายละเอียด'}`);
+      }
+      await loadVacancies();
+    } else {
+      const idx = vacancies.findIndex(v=>(v.id||v.ID)==spId);
+      if (idx>=0) vacancies[idx] = {...vacancies[idx], Status:'Close', CloseDate:today};
+      renderVacancies();
+      updateKPI();
+    }
+    closeModal('vacancy-modal');
+    showToast('ปิดตำแหน่งงานเรียบร้อยแล้ว');
+  } catch(e) {
+    console.error('closeVacancy error:', e);
+    alert('ปิดตำแหน่งไม่สำเร็จ: ' + (e.message||'unknown') + '\n(ดู Console สำหรับรายละเอียด)');
+  } finally {
+    btn.disabled = false; btn.textContent = '🔒 ปิดตำแหน่งงาน';
+  }
+}
+
 // ===================== CANDIDATE MODAL =====================
-function openCandidateModal() {
+// หา VacancyID ที่ตรงกับ param จาก URL — รองรับ vacancy (id ตรง), position (ชื่อตำแหน่ง), branch (ชื่อสาขาไทย)
+// พิจารณาเฉพาะ vacancy ที่เปิดรับ (Open) เพราะ dropdown แสดงเฉพาะตัวที่เปิด; ไม่ตรง → คืน null (ไม่ pre-select)
+function matchVacancyId({ vacancy, position, branch } = {}) {
+  const open = vacancies.filter(v => getVStatus(v) === 'Open');
+  const norm = s => (s ?? '').toString().trim().toLowerCase();
+  if (vacancy) {
+    const byId = open.find(v => String(v.id || v.ID) === String(vacancy));
+    if (byId) return byId.id || byId.ID;
+  }
+  if (position || branch) {
+    const hit = open.find(v =>
+      (!position || norm(getVTitle(v)) === norm(position)) &&
+      (!branch   || norm(getVBranch(v)) === norm(branch)));
+    if (hit) return hit.id || hit.ID;
+  }
+  return null;
+}
+
+function openCandidateModal(prefill = {}) {
   ['c-first','c-last','c-email','c-phone'].forEach(id=>{
     const el=document.getElementById(id);
     if(el){el.value='';el.classList.remove('ai-filled');}
   });
   document.getElementById('c-status').value='New';
-  document.getElementById('c-vacancy').innerHTML='<option value="">-- เลือกตำแหน่ง --</option>'+
-    vacancies.filter(v=>getVStatus(v)==='Open').map(v=>`<option value="${v.id||v.ID}">${getVTitle(v)} — ${v.Branch||'-'}</option>`).join('');
+  const vacSel = document.getElementById('c-vacancy');
+  vacSel.innerHTML='<option value="">-- เลือกตำแหน่ง --</option>'+
+    vacancies.filter(v=>getVStatus(v)==='Open').map(v=>`<option value="${v.id||v.ID}">${getVTitle(v)} — ${getVBranch(v)||'-'}</option>`).join('');
+  // pre-select ตำแหน่งที่ตรงกับ param จาก URL (Copilot Agent ส่งมา) — ถ้าไม่มี/ไม่ตรง ก็ปล่อยว่างให้ผู้ใช้เลือกเอง
+  const matchId = matchVacancyId(prefill);
+  if (matchId != null) vacSel.value = String(matchId);
   document.getElementById('upload-title').textContent='อัปโหลด CV (PDF / DOCX)';
   document.getElementById('ai-alert').style.display='none';
   document.getElementById('upload-zone').style.background='';
@@ -1284,11 +1378,11 @@ let chatHistory = [];
 
 function buildSystemPrompt() {
   const vacancyList = vacancies.map(v =>
-    `- ${v.Position||v.Title} | สาขา: ${v.Branch} | สถานะ: ${getVStatus(v)} | อัตรา: ${v.Count||v.Slots||1} | Recruiter: ${v.Reporter||v.Recruiter||'-'}`
+    `- ${getVTitle(v)} | สาขา: ${getVBranch(v)||'-'} | สถานะ: ${getVStatus(v)} | อัตรา: ${v.Count||v.Slots||1} | Recruiter: ${v.Reporter||v.Recruiter||'-'}`
   ).join('\n');
 
   const candidateList = candidates.map(c =>
-    `- ${c.Title||c.FullName} | ตำแหน่ง: ${c.VacancyTitle||'-'} | สถานะ: ${c.CandidateStatus||'-'}`
+    `- ${fieldText(c.Title)||fieldText(c.FullName)||'-'} | ตำแหน่ง: ${fieldText(c.VacancyTitle)||'-'} | สถานะ: ${fieldText(c.CandidateStatus)||'-'}`
   ).join('\n');
 
   const positionList = POSITIONS.join('\n- ');
