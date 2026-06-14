@@ -114,6 +114,17 @@
 - **Filter ใหม่:** `#filter-region` + `#filter-area` (เติม option จากค่าจริงในข้อมูลด้วย `populateVacancyFilters()`)
 - system prompt ของ AI โชว์ Region/Area HR แทน Recruiter
 
+## 🆕 ทำเพิ่ม (session นี้ — Filter ตำแหน่ง + Dashboard Stamp รายวัน)
+- **Filter ตำแหน่งงาน:** เพิ่ม dropdown `#filter-position` (เติม option จากตำแหน่งที่มีจริงใน data) + เงื่อนไขใน `applyFilter`
+- **Dashboard Stamp (KPI รายวัน auto → SharePoint):**
+  - `stampDailyKPI()` — POST `{ Date, Total, Open, Close, Candidates }` ไป `CONFIG.POST_SNAPSHOT_URL`
+  - เรียกตอน init หลังโหลด vacancies+candidates ครบ (Promise.all); กัน stamp ซ้ำด้วย `localStorage.hrpro_lastStamp` (วันละครั้ง/browser)
+  - เพิ่ม secret **optional** `POST_SNAPSHOT_URL` (CONFIG + log + inject deploy.yml, ไม่ required → ไม่ทำ deploy fail)
+  - **▶️ ผู้ใช้ต้องทำ:** สร้าง List ใหม่ (เช่น `KPISnapshot`: Date/Total/Open/Close/Candidates) + flow HTTP POST
+    ที่ **upsert ตาม Date** (กัน record ซ้ำข้ามผู้ใช้) → ตั้ง secret `POST_SNAPSHOT_URL` → merge เข้า main
+  - หมายเหตุ: เป็น client-driven (ต้องมีคนเปิด dashboard ในวันนั้น); ถ้าต้องการแน่นอนกว่า ใช้ Scheduled flow ฝั่ง SharePoint แทน
+  - ยังไม่มี UI แสดงเทรนด์ย้อนหลัง (เก็บอย่างเดียวตามที่ตกลง) — ทำ GET+กราฟเพิ่มได้ภายหลัง
+
 ## 🐛 Fix: ตำแหน่ง/สาขา ขึ้น "[object Object]"
 - SharePoint คืน `Position`/`Branch` (และอาจ `Status`/candidate fields) เป็น **object** (lookup/choice/MMD เช่น `{Value}`/`{Label}`/`{LookupValue}`) → render ตรง ๆ เป็น `[object Object]`
 - เพิ่ม helper `fieldText(val)` ดึง string จาก object ทน ๆ + `getVBranch(v)` และให้ `getVStatus/getVTitle` ใช้ `fieldText`

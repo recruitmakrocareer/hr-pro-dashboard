@@ -435,6 +435,9 @@ tbody tr:hover{background:#F8F7FF}
             <option value="Close">ปิดแล้ว</option>
             <option value="Hold">Hold</option>
           </select>
+          <select id="filter-position" onchange="applyFilter()">
+            <option value="">ทุกตำแหน่ง</option>
+          </select>
           <select id="filter-branch" onchange="applyFilter()">
             <option value="">ทุกสาขา</option>
           </select>
@@ -700,6 +703,9 @@ const CONFIG = {
   // Flow: GET BranchMaster — คืนรายการสาขา (LocationCode/NameTH/NameEN/Region/AreaHR/...) สำหรับ lookup Area HR
   // optional — ถ้ายังไม่ตั้ง secret คอลัมน์ Area HR จะแสดง '-'
   GET_BRANCHMASTER_URL: '',
+  // Flow: POST Daily KPI Snapshot — บันทึก stamp KPI รายวันลง List (Date/Total/Open/Close/Candidates)
+  // optional — ถ้ายังไม่ตั้ง secret จะไม่ stamp (ข้ามเงียบ ๆ)
+  POST_SNAPSHOT_URL: '',
   COPILOT_IFRAME_URL: '',  // Copilot Studio embed URL
   CLAUDE_API_KEY: '',
   PROXY_URL: 'https://hr-pro-claude-proxy.oonllos.workers.dev',
@@ -717,6 +723,7 @@ console.log('[CONFIG] URLs present?', {
   POST_CANDIDATE_URL: !!CONFIG.POST_CANDIDATE_URL,
   CLOSE_VACANCY_URL: !!CONFIG.CLOSE_VACANCY_URL,
   GET_BRANCHMASTER_URL: !!CONFIG.GET_BRANCHMASTER_URL,
+  POST_SNAPSHOT_URL: !!CONFIG.POST_SNAPSHOT_URL,
   PROXY_URL: !!CONFIG.PROXY_URL,
 });
 
@@ -834,8 +841,10 @@ document.addEventListener('DOMContentLoaded', () => {
   makeSearchableSelect('v-title', 'ตำแหน่ง');
   // โหลด BranchMaster ก่อน (map Area HR/Region) แล้วค่อย loadVacancies เพื่อให้ render ครั้งแรกมี Area HR ครบ
   // loadVacancies ก่อน handleUrlAction — dropdown ผู้สมัครอ่านจาก vacancies จึงต้องโหลดเสร็จก่อน pre-select
-  loadBranchMaster().finally(() => loadVacancies().then(handleUrlAction));
-  loadCandidates();
+  // stampDailyKPI หลังโหลด vacancies+candidates ครบ (ตัวเลข KPI ต้องครบก่อน stamp)
+  loadBranchMaster().finally(() => {
+    Promise.all([loadVacancies().then(handleUrlAction), loadCandidates()]).then(stampDailyKPI);
+  });
 });
 
 // Copilot Agent ส่ง user มาที่ Dashboard ด้วย ?action=add-applicant (+ branch/position/vacancy optional)
@@ -849,6 +858,30 @@ function handleUrlAction() {
       vacancy:  params.get('vacancy')  || '',
     });
   }
+}
+
+// ===================== DASHBOARD STAMP =====================
+// บันทึก snapshot KPI รายวันลง SharePoint (auto) — กัน stamp ซ้ำด้วย localStorage (วันละครั้งต่อ browser)
+// flow ฝั่ง SharePoint ควร upsert ตาม Date (ถ้ามี Date เดิมให้ update ไม่ใช่สร้างซ้ำ) เพื่อกัน record ซ้ำข้ามผู้ใช้
+async function stampDailyKPI() {
+  if (!CONFIG.POST_SNAPSHOT_URL) return;
+  const today = new Date().toISOString().split('T')[0];
+  try { if (localStorage.getItem('hrpro_lastStamp') === today) return; } catch {}  // วันนี้ stamp แล้ว
+  const payload = {
+    Date: today,
+    Total: vacancies.length,
+    Open:  vacancies.filter(v => getVStatus(v) === 'Open').length,
+    Close: vacancies.filter(v => getVStatus(v) === 'Close').length,
+    Candidates: candidates.length,
+  };
+  try {
+    const res = await fetch(CONFIG.POST_SNAPSHOT_URL, {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+    });
+    if (!res.ok) { console.error('[stampDailyKPI] HTTP', res.status, (await res.text()).slice(0,200)); return; }
+    try { localStorage.setItem('hrpro_lastStamp', today); } catch {}
+    console.log('[stampDailyKPI] บันทึก snapshot วันนี้:', payload);
+  } catch (e) { console.error('[stampDailyKPI] error:', e); }
 }
 
 // ===================== LOAD DATA =====================
@@ -1038,17 +1071,19 @@ function renderVacancies(data) {
 }
 
 function applyFilter() {
-  const status = document.getElementById('filter-status').value;
-  const branch = document.getElementById('filter-branch').value;
-  const region = document.getElementById('filter-region').value;
-  const area   = document.getElementById('filter-area').value;
-  const search = document.getElementById('filter-search').value.toLowerCase();
+  const status   = document.getElementById('filter-status').value;
+  const position = document.getElementById('filter-position').value;
+  const branch   = document.getElementById('filter-branch').value;
+  const region   = document.getElementById('filter-region').value;
+  const area     = document.getElementById('filter-area').value;
+  const search   = document.getElementById('filter-search').value.toLowerCase();
   const filtered = vacancies.filter(v =>
-    (!status || getVStatus(v)===status) &&
-    (!branch || normBranch(getVBranch(v))===normBranch(branch)) &&  // ทน prefix "สาขา"
-    (!region || getVRegion(v)===region) &&
-    (!area   || getVAreaHR(v)===area) &&
-    (!search || getVTitle(v).toLowerCase().includes(search))
+    (!status   || getVStatus(v)===status) &&
+    (!position || getVTitle(v)===position) &&
+    (!branch   || normBranch(getVBranch(v))===normBranch(branch)) &&  // ทน prefix "สาขา"
+    (!region   || getVRegion(v)===region) &&
+    (!area     || getVAreaHR(v)===area) &&
+    (!search   || getVTitle(v).toLowerCase().includes(search))
   );
   renderVacancies(filtered);
 }
@@ -1064,8 +1099,9 @@ function populateVacancyFilters() {
       opts.map(o=>`<option value="${o}">${o}</option>`).join('');
     if (opts.includes(cur)) sel.value = cur;
   };
-  fill('filter-region', vacancies.map(getVRegion), 'ทุก Region');
-  fill('filter-area',   vacancies.map(getVAreaHR), 'ทุก Area HR');
+  fill('filter-position', vacancies.map(getVTitle).filter(t => t && t !== '-'), 'ทุกตำแหน่ง');
+  fill('filter-region',   vacancies.map(getVRegion), 'ทุก Region');
+  fill('filter-area',     vacancies.map(getVAreaHR), 'ทุก Area HR');
 }
 
 function applyVacancyFilter() {
