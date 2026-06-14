@@ -388,7 +388,6 @@ tbody tr:hover{background:#F8F7FF}
   </div>
   <div class="nav-links">
     <button class="nav-link active" onclick="showPage('dashboard',this)">แดชบอร์ด</button>
-    <button class="nav-link" onclick="showPage('vacancy',this)">ตำแหน่งงาน</button>
     <button class="nav-link" onclick="showPage('candidate',this)">ผู้สมัคร</button>
   </div>
   <div class="nav-right">
@@ -524,40 +523,6 @@ tbody tr:hover{background:#F8F7FF}
 </div>
 </div>
 
-<!-- ==================== PAGE: VACANCY ==================== -->
-<div id="page-vacancy" class="page">
-<div class="container">
-  <div class="panel">
-    <div class="panel-header">
-      <div class="panel-title">📋 จัดการตำแหน่งงาน</div>
-      <div class="panel-actions">
-        <button class="btn btn-primary btn-sm" onclick="openVacancyModal()">+ เพิ่มตำแหน่ง</button>
-      </div>
-    </div>
-    <div class="filter-bar">
-      <select id="v-filter-status" onchange="applyVacancyFilter()">
-        <option value="">ทุกสถานะ</option>
-        <option value="Open">เปิดรับ</option>
-        <option value="Close">ปิดแล้ว</option>
-        <option value="Hold">Hold</option>
-      </select>
-      <input type="text" id="v-filter-search" placeholder="🔍 ค้นหา..." oninput="applyVacancyFilter()">
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr>
-          <th>ตำแหน่งงาน</th><th>สาขา</th><th>สถานะ</th>
-          <th style="text-align:center">อัตรา</th><th>Region</th>
-          <th>Area HR</th><th>ปิด</th><th></th>
-        </tr></thead>
-        <tbody id="vacancy-tbody-2">
-          <tr><td colspan="8"><div class="empty"><div class="empty-icon">⏳</div><div class="empty-text">กำลังโหลด...</div></div></td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-</div>
 
 <!-- ==================== PAGE: CANDIDATE ==================== -->
 <div id="page-candidate" class="page">
@@ -1134,36 +1099,31 @@ function updateKPI() {
 function renderVacancies(data) {
   // เรียงใหม่ล่าสุดขึ้นบนสุด (ID จาก SharePoint รันเพิ่มตามลำดับการสร้าง)
   const rows = [...(data || vacancies)].sort((a,b)=>(b.ID||b.id||0)-(a.ID||a.id||0));
-  const tbodies = ['vacancy-tbody','vacancy-tbody-2'];
-  tbodies.forEach(id => {
-    const tb = document.getElementById(id);
-    if (!tb) return;
-    if (!rows.length) {
-      tb.innerHTML = `<tr><td colspan="8"><div class="empty"><div class="empty-icon">📭</div><div class="empty-text">ไม่พบข้อมูล</div></div></td></tr>`;
-      return;
-    }
-    tb.innerHTML = rows.map(v => {
-      const status = getVStatus(v);
-      const badge = status==='Open'
-        ? `<span class="badge badge-open">เปิดรับ</span>`
-        : status==='Close'
-        ? `<span class="badge badge-close">ปิดแล้ว</span>`
-        : `<span class="badge badge-hold">Hold</span>`;
-      const closeDate = (v.ClosedDate || v.CloseDate || '').split('T')[0] || '-';
-      return `<tr onclick="editVacancy(${v.id||v.ID})">
-        <td class="col-title">${getVTitle(v)}</td>
-        <td>${getVBranch(v)||'-'}</td>
-        <td>${badge}</td>
-        <td style="text-align:center">${v.Count||v.Slots||1}</td>
-        <td>${getVRegion(v)||'-'}</td>
-        <td>${getVAreaHR(v)||'-'}</td>
-        ${id==='vacancy-tbody-2'?`<td>${closeDate}</td>`:''}
-        <td onclick="event.stopPropagation()">
-          <button class="btn btn-sm btn-icon" onclick="editVacancy(${v.id||v.ID})" title="แก้ไข">✏️</button>
-        </td>
-      </tr>`;
-    }).join('');
-  });
+  const tb = document.getElementById('vacancy-tbody');
+  if (!tb) return;
+  if (!rows.length) {
+    tb.innerHTML = `<tr><td colspan="7"><div class="empty"><div class="empty-icon">📭</div><div class="empty-text">ไม่พบข้อมูล</div></div></td></tr>`;
+    return;
+  }
+  tb.innerHTML = rows.map(v => {
+    const status = getVStatus(v);
+    const badge = status==='Open'
+      ? `<span class="badge badge-open">เปิดรับ</span>`
+      : status==='Close'
+      ? `<span class="badge badge-close">ปิดแล้ว</span>`
+      : `<span class="badge badge-hold">Hold</span>`;
+    return `<tr onclick="editVacancy(${v.id||v.ID})">
+      <td class="col-title">${getVTitle(v)}</td>
+      <td>${getVBranch(v)||'-'}</td>
+      <td>${badge}</td>
+      <td style="text-align:center">${v.Count||v.Slots||1}</td>
+      <td>${getVRegion(v)||'-'}</td>
+      <td>${getVAreaHR(v)||'-'}</td>
+      <td onclick="event.stopPropagation()">
+        <button class="btn btn-sm btn-icon" onclick="editVacancy(${v.id||v.ID})" title="แก้ไข">✏️</button>
+      </td>
+    </tr>`;
+  }).join('');
 }
 
 function applyFilter() {
@@ -1198,16 +1158,6 @@ function populateVacancyFilters() {
   fill('filter-position', vacancies.map(getVTitle).filter(t => t && t !== '-'), 'ทุกตำแหน่ง');
   fill('filter-region',   vacancies.map(getVRegion), 'ทุก Region');
   fill('filter-area',     vacancies.map(getVAreaHR), 'ทุก Area HR');
-}
-
-function applyVacancyFilter() {
-  const status = document.getElementById('v-filter-status').value;
-  const search = document.getElementById('v-filter-search').value.toLowerCase();
-  const filtered = vacancies.filter(v =>
-    (!status || getVStatus(v)===status) &&
-    (!search || getVTitle(v).toLowerCase().includes(search))
-  );
-  renderVacancies(filtered);
 }
 
 // ===================== RENDER CANDIDATES =====================
@@ -1976,7 +1926,6 @@ function showPage(name,btn) {
   document.querySelectorAll('.nav-link').forEach(l=>l.classList.remove('active'));
   document.getElementById(`page-${name}`).classList.add('active');
   if(btn)btn.classList.add('active');
-  if(name==='vacancy'){applyVacancyFilter();}
   if(name==='candidate'){renderCandidates();}
 }
 
@@ -1992,7 +1941,6 @@ function showToast(msg) {
 <!-- BOTTOM NAV (Mobile only) -->
 <nav class="bottom-nav" id="bottom-nav">
   <button class="bnav-item active" onclick="showPage('dashboard',this,'b')"><span class="bicon">📊</span>แดชบอร์ด</button>
-  <button class="bnav-item" onclick="showPage('vacancy',this,'b')"><span class="bicon">📋</span>ตำแหน่ง</button>
   <button class="bnav-item" onclick="showPage('candidate',this,'b')"><span class="bicon">👤</span>ผู้สมัคร</button>
   <button class="bnav-item" onclick="showPage('chat',this,'b')"><span class="bicon">🤖</span>AI Agent</button>
 </nav>
