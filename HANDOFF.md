@@ -65,6 +65,12 @@
 - Adaptive Card JSON (ฝั่ง Copilot Studio) ใช้ `Action.OpenUrl` ไป `.../?action=add-applicant[&branch=&position=]` — เป็นงานฝั่ง Agent (ไม่ใช่ code repo นี้)
 - Smoke test ครอบ `handleUrlAction` / `matchVacancyId` / `openCandidateModal` แล้ว
 
+## 🐛 Fix: ตำแหน่ง/สาขา ขึ้น "[object Object]"
+- SharePoint คืน `Position`/`Branch` (และอาจ `Status`/candidate fields) เป็น **object** (lookup/choice/MMD เช่น `{Value}`/`{Label}`/`{LookupValue}`) → render ตรง ๆ เป็น `[object Object]`
+- เพิ่ม helper `fieldText(val)` ดึง string จาก object ทน ๆ + `getVBranch(v)` และให้ `getVStatus/getVTitle` ใช้ `fieldText`
+- ใช้ `getVTitle/getVBranch/fieldText` ทุกจุดที่อ่านเป็นข้อความ: ตารางตำแหน่ง, filter สาขา, dropdown ผู้สมัคร, `matchVacancyId`, ฟอร์มแก้ไข, การ์ดผู้สมัคร, system prompt
+- object ที่ไม่รู้จัก key → คืน `''` (ดีกว่าโชว์ `[object Object]`); ถ้าเจอ blank ให้ดู console `loadVacancies` "First item" หา key จริงแล้วเพิ่มใน `fieldText`
+
 ## 🔧 งานที่เหลือ / ต้องเช็กต่อ
 1. **CV ของผู้สมัครจริง** — ถ้ามี CV แต่ขึ้น "ยังไม่มี CV" → ดู console `[loadCandidates] first item keys: [...]` หาชื่อคอลัมน์ CV จริง แล้วเพิ่มชื่อนั้นใน `cvLinkOf()` (`index.html`)
 2. **บันทึกผู้สมัคร (POST New Candidate)** — ยังไม่ได้ทดสอบว่า save เข้า SharePoint จริง; อาจติด stale URL เหมือน GET → ถ้า save 400 ให้เอา URL ปัจจุบันมาอัปเดต `POST_CANDIDATE_URL`

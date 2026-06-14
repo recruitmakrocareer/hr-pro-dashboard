@@ -905,18 +905,25 @@ async function loadCandidates() {
 }
 
 // ===================== KPI =====================
-function getVStatus(v) {
-  let s = v.Status || v.status || '';
-  if (typeof s === 'object') {
-    s = s.Value || s.Label || s.value || s.label || '';
+// SharePoint อาจคืน field เป็น object (lookup/choice/person/managed metadata) เช่น {Value}/{Label}/{DisplayName}
+// → ดึงเป็น string ให้ทน (ไม่งั้น render เป็น "[object Object]")
+function fieldText(val) {
+  if (val == null) return '';
+  if (typeof val === 'object') {
+    return (val.Value ?? val.Label ?? val.value ?? val.label ??
+            val.DisplayName ?? val.Title ?? val.LookupValue ?? '').toString().trim();
   }
-  s = s.toString().trim();
+  return val.toString().trim();
+}
+function getVStatus(v) {
+  let s = fieldText(v.Status ?? v.status);
   if (s.toLowerCase() === 'open') return 'Open';
   if (s.toLowerCase() === 'close' || s.toLowerCase() === 'closed') return 'Close';
   if (s.toLowerCase() === 'hold') return 'Hold';
   return s || 'Hold';
 }
-function getVTitle(v)  { return v.Position || v.Title || '-'; }
+function getVTitle(v)  { return fieldText(v.Position) || fieldText(v.Title) || '-'; }
+function getVBranch(v) { return fieldText(v.Branch); }
 
 function updateKPI() {
   document.getElementById('kpi-total').textContent = vacancies.length;
@@ -952,7 +959,7 @@ function renderVacancies(data) {
       const closeDate = (v.ClosedDate || v.CloseDate || '').split('T')[0] || '-';
       return `<tr onclick="editVacancy(${v.id||v.ID})">
         <td class="col-title">${getVTitle(v)}</td>
-        <td>${v.Branch||'-'}</td>
+        <td>${getVBranch(v)||'-'}</td>
         <td>${badge}</td>
         <td style="text-align:center">${v.Count||v.Slots||1}</td>
         <td>${v.Reporter||v.Recruiter||v.RecruiterName||'-'}</td>
@@ -972,7 +979,7 @@ function applyFilter() {
   const search = document.getElementById('filter-search').value.toLowerCase();
   const filtered = vacancies.filter(v =>
     (!status || getVStatus(v)===status) &&
-    (!branch || v.Branch===branch) &&
+    (!branch || getVBranch(v)===branch) &&
     (!search || getVTitle(v).toLowerCase().includes(search))
   );
   renderVacancies(filtered);
@@ -1004,22 +1011,26 @@ function renderCandidates() {
   }
   const statusColor = {New:'badge-hold',Screening:'badge-hold',Interview:'badge-open',Offer:'badge-open',Pass:'badge-open',Fail:'badge-close'};
   grid.innerHTML = candidates.map(c => {
-    const initials = (c.Title||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    // SharePoint อาจคืนชื่อ/ตำแหน่งเป็น object → ใช้ fieldText ให้ทน (กัน "[object Object]")
+    const cName = fieldText(c.Title) || '-';
+    const cPos = fieldText(c.VacancyTitle) || 'ไม่ระบุตำแหน่ง';
+    const cStatus = fieldText(c.CandidateStatus) || 'New';
+    const initials = (cName !== '-' ? cName : '?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
     const cv = cvLinkOf(c);
     return `<div class="candidate-card">
       <div class="candidate-header">
         <div class="candidate-avatar">${initials}</div>
         <div>
-          <div class="candidate-name">${c.Title||'-'}</div>
-          <div class="candidate-pos">${c.VacancyTitle||'ไม่ระบุตำแหน่ง'}</div>
+          <div class="candidate-name">${cName}</div>
+          <div class="candidate-pos">${cPos}</div>
         </div>
       </div>
       <div class="candidate-meta">
-        <span>📧 ${c.Email||'-'}</span>
-        <span>📱 ${c.Phone||'-'}</span>
+        <span>📧 ${fieldText(c.Email)||'-'}</span>
+        <span>📱 ${fieldText(c.Phone)||'-'}</span>
       </div>
       <div class="candidate-footer">
-        <span class="badge ${statusColor[c.CandidateStatus]||'badge-hold'}">${c.CandidateStatus||'New'}</span>
+        <span class="badge ${statusColor[cStatus]||'badge-hold'}">${cStatus}</span>
         ${cv?`<a class="cv-link" href="${cv}" target="_blank">📄 ดู CV</a>`:`<span style="font-size:12px;color:var(--text-3)">ยังไม่มี CV</span>`}
       </div>
     </div>`;
@@ -1047,8 +1058,8 @@ function editVacancy(id) {
   editVacancyId = v.ID || v.id;
   document.getElementById('v-id').value = editVacancyId;
   document.getElementById('vacancy-modal-title').textContent = 'แก้ไขตำแหน่งงาน';
-  document.getElementById('v-title').value = v.Position || v.Title || '';
-  document.getElementById('v-branch').value = v.Branch || '';
+  document.getElementById('v-title').value = fieldText(v.Position) || fieldText(v.Title) || '';
+  document.getElementById('v-branch').value = getVBranch(v);
   document.getElementById('v-status').value = getVStatus(v) || 'Open';
   document.getElementById('v-slots').value = v.Count || v.Slots || 1;
   document.getElementById('v-recruiter').value = v.Reporter || v.Recruiter || v.RecruiterName || '';
@@ -1145,7 +1156,7 @@ function matchVacancyId({ vacancy, position, branch } = {}) {
   if (position || branch) {
     const hit = open.find(v =>
       (!position || norm(getVTitle(v)) === norm(position)) &&
-      (!branch   || norm(v.Branch)    === norm(branch)));
+      (!branch   || norm(getVBranch(v)) === norm(branch)));
     if (hit) return hit.id || hit.ID;
   }
   return null;
@@ -1159,7 +1170,7 @@ function openCandidateModal(prefill = {}) {
   document.getElementById('c-status').value='New';
   const vacSel = document.getElementById('c-vacancy');
   vacSel.innerHTML='<option value="">-- เลือกตำแหน่ง --</option>'+
-    vacancies.filter(v=>getVStatus(v)==='Open').map(v=>`<option value="${v.id||v.ID}">${getVTitle(v)} — ${v.Branch||'-'}</option>`).join('');
+    vacancies.filter(v=>getVStatus(v)==='Open').map(v=>`<option value="${v.id||v.ID}">${getVTitle(v)} — ${getVBranch(v)||'-'}</option>`).join('');
   // pre-select ตำแหน่งที่ตรงกับ param จาก URL (Copilot Agent ส่งมา) — ถ้าไม่มี/ไม่ตรง ก็ปล่อยว่างให้ผู้ใช้เลือกเอง
   const matchId = matchVacancyId(prefill);
   if (matchId != null) vacSel.value = String(matchId);
@@ -1367,11 +1378,11 @@ let chatHistory = [];
 
 function buildSystemPrompt() {
   const vacancyList = vacancies.map(v =>
-    `- ${v.Position||v.Title} | สาขา: ${v.Branch} | สถานะ: ${getVStatus(v)} | อัตรา: ${v.Count||v.Slots||1} | Recruiter: ${v.Reporter||v.Recruiter||'-'}`
+    `- ${getVTitle(v)} | สาขา: ${getVBranch(v)||'-'} | สถานะ: ${getVStatus(v)} | อัตรา: ${v.Count||v.Slots||1} | Recruiter: ${v.Reporter||v.Recruiter||'-'}`
   ).join('\n');
 
   const candidateList = candidates.map(c =>
-    `- ${c.Title||c.FullName} | ตำแหน่ง: ${c.VacancyTitle||'-'} | สถานะ: ${c.CandidateStatus||'-'}`
+    `- ${fieldText(c.Title)||fieldText(c.FullName)||'-'} | ตำแหน่ง: ${fieldText(c.VacancyTitle)||'-'} | สถานะ: ${fieldText(c.CandidateStatus)||'-'}`
   ).join('\n');
 
   const positionList = POSITIONS.join('\n- ');
