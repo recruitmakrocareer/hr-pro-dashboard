@@ -958,13 +958,15 @@ async function loadBranchMaster() {
     const items = data.value || [];
     const map = {};
     for (const b of items) {
-      const nameTH = fieldText(b.NameTH) || fieldText(b.NameTh);
-      const code   = fieldText(b.Title) || fieldText(b.LocationCode);  // Title = LocationCode ใน BranchMaster
-      const areaHR = fieldText(b.AreaHR) || fieldText(b['Area HR']) || fieldText(b.AreaHRName) || fieldText(b.Area_HR);
+      const id     = fieldText(b.ID) || fieldText(b.Id) || fieldText(b.ItemInternalId);
+      const nameTH = fieldText(b.NameTH) || fieldText(b.NameTh) || fieldText(b.Title);  // Title = LocationCode/ชื่อ แล้วแต่ list
+      const code   = fieldText(b.Title) || fieldText(b.LocationCode);
+      const areaHR = fieldText(b.AreaHR) || fieldText(b['Area HR']) || fieldText(b.AreaHRName) || fieldText(b.Area_HR) || fieldText(b.Area);
       const region = fieldText(b.Region);
       const rec = { areaHR, region, nameTH, locationCode: code };
-      if (nameTH) map[normBranch(nameTH)] = rec;        // คีย์หลัก: ชื่อสาขาไทย (ตรงกับ JobVacancy.Branch)
-      if (code)   map['#' + code.toLowerCase()] = rec;  // คีย์สำรอง: location code
+      if (id)     map['#id:' + id] = rec;            // คีย์หลัก: BranchMaster item ID (ตรงกับ JobVacancy.Branch#Id — แม่นสุด)
+      if (nameTH) map[normBranch(nameTH)] = rec;     // คีย์สำรอง: ชื่อสาขาไทย
+      if (code)   map['#code:' + code.toLowerCase()] = rec;
     }
     branchInfo = map;
     console.log('[loadBranchMaster] โหลด', items.length, 'สาขา → map', Object.keys(map).length, 'คีย์ | first keys:', Object.keys(items[0] || {}));
@@ -1078,7 +1080,12 @@ function getVAreaHR(v) {
          fieldText(v.Area_HR) || fieldText(v.AreaHr) || (branchOf(v).areaHR || '');
 }
 // หา record ของสาขาจาก BranchMaster ตามชื่อสาขาของ vacancy (ทน prefix "สาขา")
-function branchOf(v) { return branchInfo[normBranch(getVBranch(v))] || {}; }
+// หา record ของสาขาจาก BranchMaster — ใช้ Branch#Id (lookup id) ก่อน (แม่นสุด) ไม่งั้น fallback ชื่อสาขา
+function branchOf(v) {
+  const lid = v['Branch#Id'] ?? v.Branch_x0023_Id;
+  if (lid != null && branchInfo['#id:' + lid]) return branchInfo['#id:' + lid];
+  return branchInfo[normBranch(getVBranch(v))] || {};
+}
 // แถวว่างจาก SharePoint (ไม่มีทั้งตำแหน่งและสาขา) → ไม่ต้องแสดง/ไม่นับ KPI
 function isEmptyVacancy(v) {
   return !(fieldText(v.Position) || fieldText(v.Title)) && !getVBranch(v);
