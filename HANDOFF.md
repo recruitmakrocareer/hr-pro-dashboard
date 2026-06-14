@@ -101,8 +101,16 @@
   (agent tools `resolve_branch`/`get_open_vacancies` ใช้ `normBranch` อยู่แล้ว)
 - **ตารางตำแหน่งงาน:** เอา **Recruiter** + **วันที่เปิดรับ** ออก → ใส่ **Region** + **Area HR** แทน (ทั้ง 2 ตาราง)
   - `getVRegion(v)` = `Region`; `getVAreaHR(v)` = ลองหลายชื่อ field (`AreaHR`/`Area HR`/`AreaHRName`/...)
-  - ⚠️ Area HR ตามสเปกอยู่ใน **BranchMaster** ไม่ใช่ JobVacancy — ถ้า column แสดง "-" ทุกแถว แปลว่า JobVacancy
-    ไม่มี field นี้ → ต้องเพิ่ม column AreaHR ใน List + ให้ GET flow คืนมา หรือ map จาก BranchMaster ฝั่ง flow
+  - Area HR ดึงจาก **BranchMaster** (lookup ตามชื่อสาขา) — ดูหัวข้อถัดไป
+
+## 🆕 ทำเพิ่ม (session นี้ — Area HR จาก BranchMaster)
+- เพิ่ม `loadBranchMaster()` → fetch `CONFIG.GET_BRANCHMASTER_URL` (POST `{}`) สร้าง map `normBranch(NameTH) → {areaHR, region, ...}`
+- `getVAreaHR(v)`/`getVRegion(v)` → อ่านจาก item ก่อน ไม่งั้น fallback `branchOf(v)` (lookup BranchMaster ตามสาขา)
+- โหลด BranchMaster ก่อน loadVacancies ตอน init (ให้ render แรกมี Area HR ครบ)
+- เพิ่ม secret **optional** `GET_BRANCHMASTER_URL` (CONFIG + log + inject ใน deploy.yml, ไม่อยู่ใน required → ไม่ทำ deploy fail)
+- **▶️ ผู้ใช้ต้องทำ:** สร้าง flow GET BranchMaster (HTTP trigger คืน `value[]` มี `NameTH`/`AreaHR`/`Region`/`Title`=LocationCode)
+  → ตั้ง Repository secret `GET_BRANCHMASTER_URL` → merge เข้า main. ถ้ายังไม่ตั้ง Area HR จะแสดง "-" (graceful)
+  - match สาขาใช้ `NameTH` (ทน prefix "สาขา"); ถ้าชื่อ field ใน BranchMaster ต่างจากนี้ ดู console `[loadBranchMaster] first keys`
 - **Filter ใหม่:** `#filter-region` + `#filter-area` (เติม option จากค่าจริงในข้อมูลด้วย `populateVacancyFilters()`)
 - system prompt ของ AI โชว์ Region/Area HR แทน Recruiter
 
