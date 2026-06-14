@@ -37,6 +37,22 @@
   - `deploy.yml` fail-loud ถ้า secret หาย + พิมพ์สถานะ OK/MISSING + `workflow_dispatch`
   - Smoke Test + CI
 
+## 🆕 ทำเพิ่มใน session นี้ (Close Vacancy — client + plumbing)
+- เพิ่มปุ่ม **🔒 ปิดตำแหน่งงาน** ในโมดัลแก้ไขตำแหน่ง (โชว์เฉพาะตำแหน่งเดิมที่ยัง "ไม่ปิด" เท่านั้น)
+- ฟังก์ชัน `closeVacancy()` — ยืนยันก่อนปิด → POST `{ id, Status:'Close', ClosedDate }` แล้ว reload
+  - ใช้ flow `CLOSE_VACANCY_URL` (ใหม่) ถ้ามี; **ถ้ายังไม่ตั้ง secret → fallback ไป `POST_VACANCY_URL`** (set Status ได้อยู่แล้ว) → ใช้งานได้ทันทีแบบ degrade
+  - ไม่มี secret/flow เลย → mock update (set Status=Close ในหน่วยความจำ)
+  - `ClosedBy` ตั้งใจไม่ส่งจาก client (เว็บไม่มี login) → ให้ flow ประทับจากผู้ใช้ของ SharePoint connection
+- เพิ่ม `CONFIG.CLOSE_VACANCY_URL` + log สถานะ + inject ใน `deploy.yml` (เป็น **optional** ไม่อยู่ใน required → ไม่ทำ deploy fail ถ้ายังไม่ตั้ง)
+- `renderVacancies()` อ่านวันที่ปิดทน `ClosedDate || CloseDate`
+- Smoke test ครอบ `closeVacancy` + `CONFIG.CLOSE_VACANCY_URL` แล้ว (ผ่าน)
+
+### ▶️ สิ่งที่ผู้ใช้ต้องทำต่อ เพื่อให้ Close Vacancy บันทึก ClosedDate/ClosedBy ลง SharePoint
+1. **SP-01–03:** เพิ่ม column ใน List `JobVacancy`: `Status` (มีแล้ว?), `ClosedDate` (Date), `ClosedBy` (Person หรือ Text)
+2. **FL-01:** สร้าง flow `HR_CLOSE_Vacancy` (HTTP request trigger) — รับ `{ id, Status, ClosedDate }` → Update item ตาม `id` → ตั้ง `ClosedDate` และประทับ `ClosedBy` จากผู้ใช้ → คืน 200
+3. เอา HTTP POST URL จาก trigger ของ flow มาตั้ง **Repository secret** `CLOSE_VACANCY_URL` แล้ว merge เข้า `main` (re-deploy)
+   - ก่อนตั้ง secret: ปิดตำแหน่งยัง work ผ่าน `POST_VACANCY_URL` (แต่จะไม่ได้ ClosedDate/ClosedBy เว้นแต่ flow POST เดิม map ให้)
+
 ## 🔧 งานที่เหลือ / ต้องเช็กต่อ
 1. **CV ของผู้สมัครจริง** — ถ้ามี CV แต่ขึ้น "ยังไม่มี CV" → ดู console `[loadCandidates] first item keys: [...]` หาชื่อคอลัมน์ CV จริง แล้วเพิ่มชื่อนั้นใน `cvLinkOf()` (`index.html`)
 2. **บันทึกผู้สมัคร (POST New Candidate)** — ยังไม่ได้ทดสอบว่า save เข้า SharePoint จริง; อาจติด stale URL เหมือน GET → ถ้า save 400 ให้เอา URL ปัจจุบันมาอัปเดต `POST_CANDIDATE_URL`

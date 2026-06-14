@@ -44,7 +44,7 @@ requiredIds.forEach(id =>
 
 console.log('3) Function ที่จำเป็นต้องถูกประกาศ');
 const requiredFns = [
-  'loadVacancies', 'loadCandidates', 'saveVacancy', 'saveCandidate',
+  'loadVacancies', 'loadCandidates', 'saveVacancy', 'saveCandidate', 'closeVacancy',
   'handleCVUpload', 'extractCVWithAI', 'sendChatCore', 'buildSystemPrompt',
   'renderVacancies', 'renderCandidates', 'updateKPI', 'showPage',
 ];
@@ -52,7 +52,7 @@ requiredFns.forEach(fn =>
   check(`function ${fn}()`, new RegExp(`function\\s+${fn}\\s*\\(`).test(html)));
 
 console.log('4) CONFIG keys ครบ');
-['GET_VACANCIES_URL', 'POST_VACANCY_URL', 'GET_CANDIDATES_URL', 'POST_CANDIDATE_URL', 'PROXY_URL', 'CLAUDE_API_KEY']
+['GET_VACANCIES_URL', 'POST_VACANCY_URL', 'GET_CANDIDATES_URL', 'POST_CANDIDATE_URL', 'CLOSE_VACANCY_URL', 'PROXY_URL', 'CLAUDE_API_KEY']
   .forEach(k => check(`CONFIG.${k}`, new RegExp(`${k}\\s*:`).test(html)));
 
 console.log('5) TD-01 guard — ไม่มี URL ลับ (sig=) hardcode ใน index.html');

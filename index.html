@@ -597,6 +597,7 @@ tbody tr:hover{background:#F8F7FF}
       </div>
     </div>
     <div class="modal-footer">
+      <button class="btn btn-danger" id="v-close-btn" onclick="closeVacancy()" style="display:none;margin-right:auto">🔒 ปิดตำแหน่งงาน</button>
       <button class="btn" onclick="closeModal('vacancy-modal')">ยกเลิก</button>
       <button class="btn btn-primary" onclick="saveVacancy()">💾 บันทึก</button>
     </div>
@@ -678,6 +679,9 @@ const CONFIG = {
   // Flow: POST New Candidate — เขียนลง List `Candidates` โครงใหม่ (Title/Email/Phone/VacancyID/VacancyTitle/CandidateStatus/CVLink)
   // ตัดสินใจ 12/06/2026: หน้าเว็บอ่านโครงใหม่อยู่แล้ว จึงไม่แก้ Flow — คอลัมน์โครงเก่า (FirstName/LastName/ResumeURL ฯลฯ) ไม่ถูกใช้ ลบจาก List ได้
   POST_CANDIDATE_URL: '__POST_CANDIDATE_URL__',
+  // Flow: HR_CLOSE_Vacancy (FL-01) — ปิดตำแหน่งงาน + บันทึก Status='Close' / ClosedDate / ClosedBy
+  // ถ้า secret ยังไม่ถูกตั้ง → ว่าง → closeVacancy() จะ fallback ไปใช้ POST_VACANCY_URL (ตั้ง Status ได้อยู่แล้ว)
+  CLOSE_VACANCY_URL:  '__CLOSE_VACANCY_URL__',
   COPILOT_IFRAME_URL: '',  // Copilot Studio embed URL
   CLAUDE_API_KEY: '__CLAUDE_API_KEY__',
   PROXY_URL: 'https://hr-pro-claude-proxy.oonllos.workers.dev',
@@ -693,6 +697,7 @@ console.log('[CONFIG] URLs present?', {
   POST_VACANCY_URL: !!CONFIG.POST_VACANCY_URL,
   GET_CANDIDATES_URL: !!CONFIG.GET_CANDIDATES_URL,
   POST_CANDIDATE_URL: !!CONFIG.POST_CANDIDATE_URL,
+  CLOSE_VACANCY_URL: !!CONFIG.CLOSE_VACANCY_URL,
   PROXY_URL: !!CONFIG.PROXY_URL,
 });
 
@@ -930,7 +935,7 @@ function renderVacancies(data) {
         ? `<span class="badge badge-close">ปิดแล้ว</span>`
         : `<span class="badge badge-hold">Hold</span>`;
       const date = (v.Created||v.OpenDate||'').split('T')[0] || '-';
-      const closeDate = v.CloseDate ? v.CloseDate.split('T')[0] : '-';
+      const closeDate = (v.ClosedDate || v.CloseDate || '').split('T')[0] || '-';
       return `<tr onclick="editVacancy(${v.id||v.ID})">
         <td class="col-title">${getVTitle(v)}</td>
         <td>${v.Branch||'-'}</td>
@@ -1018,6 +1023,7 @@ function openVacancyModal(v) {
   });
   document.getElementById('v-status').value = 'Open';
   document.getElementById('v-slots').value = 1;
+  document.getElementById('v-close-btn').style.display = 'none';  // ตำแหน่งใหม่ยังปิดไม่ได้
   openModal('vacancy-modal');
 }
 
@@ -1034,6 +1040,8 @@ function editVacancy(id) {
   document.getElementById('v-recruiter').value = v.Reporter || v.Recruiter || v.RecruiterName || '';
   document.getElementById('v-opendate').value = (v.OpenDate||'').split('T')[0];
   document.getElementById('v-notes').value = v.Notes || '';
+  // ปุ่มปิดตำแหน่ง: โชว์เฉพาะตำแหน่งเดิมที่ยังไม่ถูกปิด (กันปิดซ้ำ)
+  document.getElementById('v-close-btn').style.display = getVStatus(v) === 'Close' ? 'none' : '';
   openModal('vacancy-modal');
 }
 
@@ -1069,6 +1077,45 @@ async function saveVacancy() {
     closeModal('vacancy-modal');
     showToast(editVacancyId?'แก้ไขตำแหน่งงานเรียบร้อยแล้ว':'เพิ่มตำแหน่งงานเรียบร้อยแล้ว');
   } catch(e) { alert('เกิดข้อผิดพลาด กรุณาลองใหม่'); }
+}
+
+// ปิดตำแหน่งงาน (Close Vacancy) — ตั้ง Status='Close' + บันทึก ClosedDate
+// ใช้ flow เฉพาะ HR_CLOSE_Vacancy (CLOSE_VACANCY_URL) ถ้ามี — ไม่งั้น fallback ไป POST_VACANCY_URL (ตั้ง Status ได้อยู่แล้ว)
+async function closeVacancy() {
+  const spId = document.getElementById('v-id').value;
+  if (!spId) { alert('ต้องบันทึกตำแหน่งงานก่อน จึงจะปิดได้'); return; }
+  const title = document.getElementById('v-title').value || 'ตำแหน่งนี้';
+  if (!confirm(`ยืนยันปิดตำแหน่ง "${title}" ?\nสถานะจะเปลี่ยนเป็น "ปิดแล้ว" และบันทึกวันที่ปิด`)) return;
+
+  const today = new Date().toISOString().split('T')[0];
+  // ClosedBy ปล่อยให้ flow ประทับจากผู้ใช้ของ SharePoint connection (หน้าเว็บยังไม่มีระบบ login)
+  const payload = { id: parseInt(spId, 10), Status: 'Close', ClosedDate: today };
+  const url = CONFIG.CLOSE_VACANCY_URL || CONFIG.POST_VACANCY_URL;
+  const btn = document.getElementById('v-close-btn');
+  btn.disabled = true; btn.textContent = '⏳ กำลังปิด...';
+  try {
+    if (url) {
+      const res = await fetch(url, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      const raw = await res.text();
+      if (!res.ok) {
+        console.error('[closeVacancy] server response:', res.status, raw.slice(0,300));
+        throw new Error(`HTTP ${res.status} — ${raw.slice(0,150) || 'ไม่มีรายละเอียด'}`);
+      }
+      await loadVacancies();
+    } else {
+      const idx = vacancies.findIndex(v=>(v.id||v.ID)==spId);
+      if (idx>=0) vacancies[idx] = {...vacancies[idx], Status:'Close', CloseDate:today};
+      renderVacancies();
+      updateKPI();
+    }
+    closeModal('vacancy-modal');
+    showToast('ปิดตำแหน่งงานเรียบร้อยแล้ว');
+  } catch(e) {
+    console.error('closeVacancy error:', e);
+    alert('ปิดตำแหน่งไม่สำเร็จ: ' + (e.message||'unknown') + '\n(ดู Console สำหรับรายละเอียด)');
+  } finally {
+    btn.disabled = false; btn.textContent = '🔒 ปิดตำแหน่งงาน';
+  }
 }
 
 // ===================== CANDIDATE MODAL =====================
