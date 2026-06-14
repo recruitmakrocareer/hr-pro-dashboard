@@ -812,9 +812,23 @@ document.addEventListener('DOMContentLoaded', () => {
   populateDropdowns();
   makeSearchableSelect('v-branch', 'สาขา');
   makeSearchableSelect('v-title', 'ตำแหน่ง');
-  loadVacancies();
+  // loadVacancies ก่อน แล้วค่อยเช็ก URL action — dropdown ผู้สมัครอ่านจาก vacancies จึงต้องโหลดเสร็จก่อน pre-select
+  loadVacancies().then(handleUrlAction);
   loadCandidates();
 });
+
+// Copilot Agent ส่ง user มาที่ Dashboard ด้วย ?action=add-applicant (+ branch/position/vacancy optional)
+// → เปิด modal เพิ่มผู้สมัครอัตโนมัติ + pre-select vacancy ที่ตรง (เรียกหลัง loadVacancies() เสร็จ)
+function handleUrlAction() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('action') === 'add-applicant') {
+    openCandidateModal({
+      branch:   params.get('branch')   || '',
+      position: params.get('position') || '',
+      vacancy:  params.get('vacancy')  || '',
+    });
+  }
+}
 
 // ===================== LOAD DATA =====================
 async function loadVacancies() {
@@ -1119,14 +1133,36 @@ async function closeVacancy() {
 }
 
 // ===================== CANDIDATE MODAL =====================
-function openCandidateModal() {
+// หา VacancyID ที่ตรงกับ param จาก URL — รองรับ vacancy (id ตรง), position (ชื่อตำแหน่ง), branch (ชื่อสาขาไทย)
+// พิจารณาเฉพาะ vacancy ที่เปิดรับ (Open) เพราะ dropdown แสดงเฉพาะตัวที่เปิด; ไม่ตรง → คืน null (ไม่ pre-select)
+function matchVacancyId({ vacancy, position, branch } = {}) {
+  const open = vacancies.filter(v => getVStatus(v) === 'Open');
+  const norm = s => (s ?? '').toString().trim().toLowerCase();
+  if (vacancy) {
+    const byId = open.find(v => String(v.id || v.ID) === String(vacancy));
+    if (byId) return byId.id || byId.ID;
+  }
+  if (position || branch) {
+    const hit = open.find(v =>
+      (!position || norm(getVTitle(v)) === norm(position)) &&
+      (!branch   || norm(v.Branch)    === norm(branch)));
+    if (hit) return hit.id || hit.ID;
+  }
+  return null;
+}
+
+function openCandidateModal(prefill = {}) {
   ['c-first','c-last','c-email','c-phone'].forEach(id=>{
     const el=document.getElementById(id);
     if(el){el.value='';el.classList.remove('ai-filled');}
   });
   document.getElementById('c-status').value='New';
-  document.getElementById('c-vacancy').innerHTML='<option value="">-- เลือกตำแหน่ง --</option>'+
+  const vacSel = document.getElementById('c-vacancy');
+  vacSel.innerHTML='<option value="">-- เลือกตำแหน่ง --</option>'+
     vacancies.filter(v=>getVStatus(v)==='Open').map(v=>`<option value="${v.id||v.ID}">${getVTitle(v)} — ${v.Branch||'-'}</option>`).join('');
+  // pre-select ตำแหน่งที่ตรงกับ param จาก URL (Copilot Agent ส่งมา) — ถ้าไม่มี/ไม่ตรง ก็ปล่อยว่างให้ผู้ใช้เลือกเอง
+  const matchId = matchVacancyId(prefill);
+  if (matchId != null) vacSel.value = String(matchId);
   document.getElementById('upload-title').textContent='อัปโหลด CV (PDF / DOCX)';
   document.getElementById('ai-alert').style.display='none';
   document.getElementById('upload-zone').style.background='';

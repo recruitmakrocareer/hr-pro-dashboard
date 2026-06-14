@@ -53,6 +53,18 @@
 3. เอา HTTP POST URL จาก trigger ของ flow มาตั้ง **Repository secret** `CLOSE_VACANCY_URL` แล้ว merge เข้า `main` (re-deploy)
    - ก่อนตั้ง secret: ปิดตำแหน่งยัง work ผ่าน `POST_VACANCY_URL` (แต่จะไม่ได้ ClosedDate/ClosedBy เว้นแต่ flow POST เดิม map ให้)
 
+## 🆕 ทำเพิ่ม (Copilot Agent → Dashboard deep-link, จาก Developer Task List)
+- **Task 1 (HIGH):** `?action=add-applicant` → เปิด modal "เพิ่มผู้สมัครใหม่" อัตโนมัติตอนโหลด (`handleUrlAction()` เรียกหลัง `loadVacancies()` เสร็จ)
+- **Task 2-4:** pre-select ตำแหน่งใน dropdown "ตำแหน่งที่สมัคร" (ไม่เพิ่ม UI ตามที่ตกลง) ผ่าน `matchVacancyId()`:
+  - `vacancy=<id>` → เลือก vacancy นั้นตรง ๆ (precedence สูงสุด)
+  - `position=<ชื่อตำแหน่ง>` + `branch=<ชื่อสาขาไทย>` → หา open vacancy ที่ตรงทั้งคู่
+  - `position` เดี่ยว → ตัวแรกที่ตรง; ไม่ตรง/ไม่ส่ง → ปล่อยว่าง
+  - **branch param เป็นชื่อสาขาภาษาไทย** (ไม่ใช่ location_code "001") — ตกลงกับผู้ใช้แล้ว
+  - พิจารณาเฉพาะ vacancy ที่ Open (dropdown แสดงเฉพาะที่เปิด)
+- URLSearchParams decode `%26`→`&`, `+`→space, Thai % ให้อัตโนมัติ → match ตรง POSITIONS/Branch
+- Adaptive Card JSON (ฝั่ง Copilot Studio) ใช้ `Action.OpenUrl` ไป `.../?action=add-applicant[&branch=&position=]` — เป็นงานฝั่ง Agent (ไม่ใช่ code repo นี้)
+- Smoke test ครอบ `handleUrlAction` / `matchVacancyId` / `openCandidateModal` แล้ว
+
 ## 🔧 งานที่เหลือ / ต้องเช็กต่อ
 1. **CV ของผู้สมัครจริง** — ถ้ามี CV แต่ขึ้น "ยังไม่มี CV" → ดู console `[loadCandidates] first item keys: [...]` หาชื่อคอลัมน์ CV จริง แล้วเพิ่มชื่อนั้นใน `cvLinkOf()` (`index.html`)
 2. **บันทึกผู้สมัคร (POST New Candidate)** — ยังไม่ได้ทดสอบว่า save เข้า SharePoint จริง; อาจติด stale URL เหมือน GET → ถ้า save 400 ให้เอา URL ปัจจุบันมาอัปเดต `POST_CANDIDATE_URL`

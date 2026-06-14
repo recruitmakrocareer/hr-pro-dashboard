@@ -47,6 +47,7 @@ const requiredFns = [
   'loadVacancies', 'loadCandidates', 'saveVacancy', 'saveCandidate', 'closeVacancy',
   'handleCVUpload', 'extractCVWithAI', 'sendChatCore', 'buildSystemPrompt',
   'renderVacancies', 'renderCandidates', 'updateKPI', 'showPage',
+  'handleUrlAction', 'matchVacancyId', 'openCandidateModal',
 ];
 requiredFns.forEach(fn =>
   check(`function ${fn}()`, new RegExp(`function\\s+${fn}\\s*\\(`).test(html)));
