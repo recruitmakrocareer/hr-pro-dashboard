@@ -39,7 +39,7 @@ const requiredIds = [
   'cv-file', 'upload-zone', 'chat-input', 'chat-input-mobile',
   'c-first', 'c-last', 'c-vacancy', 'c-status', 'kpi-total',
   'v-branch', 'v-title', 'v-opendate', 'v-close-panel', 'v-close-note',
-  'filter-region', 'filter-area', 'filter-position',
+  'filter-region', 'filter-area', 'filter-position', 'trend-card', 'trend-body',
 ];
 requiredIds.forEach(id =>
   check(`#${id}`, new RegExp(`id=["']${id}["']`).test(html)));
@@ -52,6 +52,7 @@ const requiredFns = [
   'handleUrlAction', 'matchVacancyId', 'openCandidateModal',
   'editVacancy', 'selectWithValue', 'confirmCloseVacancy', 'hideClosePanel',
   'getVRegion', 'getVAreaHR', 'populateVacancyFilters', 'loadBranchMaster', 'branchOf', 'stampDailyKPI',
+  'loadSnapshots', 'renderTrend', 'selectTrend',
   // Web Agent tools (client-side)
   'runTool', 'toolResolveBranch', 'toolGetOpenVacancies', 'toolCloseVacancies', 'normBranch',
 ];
@@ -63,7 +64,7 @@ console.log('3b) Agent tool names (Web Agent Spec) ถูกประกาศ�
   .forEach(t => check(`tool '${t}'`, new RegExp(`name:\\s*['"]${t}['"]`).test(html)));
 
 console.log('4) CONFIG keys ครบ');
-['GET_VACANCIES_URL', 'POST_VACANCY_URL', 'GET_CANDIDATES_URL', 'POST_CANDIDATE_URL', 'CLOSE_VACANCY_URL', 'GET_BRANCHMASTER_URL', 'POST_SNAPSHOT_URL', 'PROXY_URL', 'CLAUDE_API_KEY']
+['GET_VACANCIES_URL', 'POST_VACANCY_URL', 'GET_CANDIDATES_URL', 'POST_CANDIDATE_URL', 'CLOSE_VACANCY_URL', 'GET_BRANCHMASTER_URL', 'POST_SNAPSHOT_URL', 'GET_SNAPSHOTS_URL', 'PROXY_URL', 'CLAUDE_API_KEY']
   .forEach(k => check(`CONFIG.${k}`, new RegExp(`${k}\\s*:`).test(html)));
 
 console.log('5) TD-01 guard — ไม่มี URL ลับ (sig=) hardcode ใน index.html');
