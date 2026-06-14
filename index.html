@@ -438,6 +438,12 @@ tbody tr:hover{background:#F8F7FF}
           <select id="filter-branch" onchange="applyFilter()">
             <option value="">ทุกสาขา</option>
           </select>
+          <select id="filter-region" onchange="applyFilter()">
+            <option value="">ทุก Region</option>
+          </select>
+          <select id="filter-area" onchange="applyFilter()">
+            <option value="">ทุก Area HR</option>
+          </select>
           <input type="text" id="filter-search" placeholder="🔍 ค้นหาตำแหน่ง..." oninput="applyFilter()">
         </div>
         <div class="table-wrap">
@@ -447,8 +453,8 @@ tbody tr:hover{background:#F8F7FF}
               <th>สาขา</th>
               <th>สถานะ</th>
               <th style="text-align:center">อัตรา</th>
-              <th>Recruiter</th>
-              <th>เปิดรับ</th>
+              <th>Region</th>
+              <th>Area HR</th>
               <th></th>
             </tr></thead>
             <tbody id="vacancy-tbody">
@@ -517,8 +523,8 @@ tbody tr:hover{background:#F8F7FF}
       <table>
         <thead><tr>
           <th>ตำแหน่งงาน</th><th>สาขา</th><th>สถานะ</th>
-          <th style="text-align:center">อัตรา</th><th>Recruiter</th>
-          <th>เปิดรับ</th><th>ปิด</th><th></th>
+          <th style="text-align:center">อัตรา</th><th>Region</th>
+          <th>Area HR</th><th>ปิด</th><th></th>
         </tr></thead>
         <tbody id="vacancy-tbody-2">
           <tr><td colspan="8"><div class="empty"><div class="empty-icon">⏳</div><div class="empty-text">กำลังโหลด...</div></div></td></tr>
@@ -869,11 +875,13 @@ async function loadVacancies() {
     } else {
       vacancies = MOCK_VACANCIES;
     }
+    populateVacancyFilters();
     renderVacancies();
     updateKPI();
   } catch(e) {
     console.error('loadVacancies error:', e);
     vacancies = MOCK_VACANCIES;
+    populateVacancyFilters();
     renderVacancies();
     updateKPI();
   }
@@ -936,6 +944,12 @@ function getVStatus(v) {
 }
 function getVTitle(v)  { return fieldText(v.Position) || fieldText(v.Title) || '-'; }
 function getVBranch(v) { return fieldText(v.Branch); }
+function getVRegion(v) { return fieldText(v.Region) || fieldText(v.region); }
+// Area HR อยู่ใน BranchMaster ตามสเปก — แต่ถ้า JobVacancy import มาด้วยก็อ่านจาก item (ลองหลายชื่อ field)
+function getVAreaHR(v) {
+  return fieldText(v.AreaHR) || fieldText(v['Area HR']) || fieldText(v.AreaHRName) ||
+         fieldText(v.Area_HR) || fieldText(v.AreaHr) || fieldText(v.Area);
+}
 // แถวว่างจาก SharePoint (ไม่มีทั้งตำแหน่งและสาขา) → ไม่ต้องแสดง/ไม่นับ KPI
 function isEmptyVacancy(v) {
   return !(fieldText(v.Position) || fieldText(v.Title)) && !getVBranch(v);
@@ -971,15 +985,14 @@ function renderVacancies(data) {
         : status==='Close'
         ? `<span class="badge badge-close">ปิดแล้ว</span>`
         : `<span class="badge badge-hold">Hold</span>`;
-      const date = (v.Created||v.OpenDate||'').split('T')[0] || '-';
       const closeDate = (v.ClosedDate || v.CloseDate || '').split('T')[0] || '-';
       return `<tr onclick="editVacancy(${v.id||v.ID})">
         <td class="col-title">${getVTitle(v)}</td>
         <td>${getVBranch(v)||'-'}</td>
         <td>${badge}</td>
         <td style="text-align:center">${v.Count||v.Slots||1}</td>
-        <td>${v.Reporter||v.Recruiter||v.RecruiterName||'-'}</td>
-        <td>${date}</td>
+        <td>${getVRegion(v)||'-'}</td>
+        <td>${getVAreaHR(v)||'-'}</td>
         ${id==='vacancy-tbody-2'?`<td>${closeDate}</td>`:''}
         <td onclick="event.stopPropagation()">
           <button class="btn btn-sm btn-icon" onclick="editVacancy(${v.id||v.ID})" title="แก้ไข">✏️</button>
@@ -992,13 +1005,32 @@ function renderVacancies(data) {
 function applyFilter() {
   const status = document.getElementById('filter-status').value;
   const branch = document.getElementById('filter-branch').value;
+  const region = document.getElementById('filter-region').value;
+  const area   = document.getElementById('filter-area').value;
   const search = document.getElementById('filter-search').value.toLowerCase();
   const filtered = vacancies.filter(v =>
     (!status || getVStatus(v)===status) &&
-    (!branch || getVBranch(v)===branch) &&
+    (!branch || normBranch(getVBranch(v))===normBranch(branch)) &&  // ทน prefix "สาขา"
+    (!region || getVRegion(v)===region) &&
+    (!area   || getVAreaHR(v)===area) &&
     (!search || getVTitle(v).toLowerCase().includes(search))
   );
   renderVacancies(filtered);
+}
+
+// เติม option ของ filter Region / Area HR จากค่าที่มีจริงในข้อมูล (master ไม่มีข้อมูลนี้)
+function populateVacancyFilters() {
+  const fill = (id, values, allLabel) => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const cur = sel.value;
+    const opts = [...new Set(values.filter(Boolean))].sort((a,b)=>a.localeCompare(b,'th'));
+    sel.innerHTML = `<option value="">${allLabel}</option>` +
+      opts.map(o=>`<option value="${o}">${o}</option>`).join('');
+    if (opts.includes(cur)) sel.value = cur;
+  };
+  fill('filter-region', vacancies.map(getVRegion), 'ทุก Region');
+  fill('filter-area',   vacancies.map(getVAreaHR), 'ทุก Area HR');
 }
 
 function applyVacancyFilter() {
@@ -1210,7 +1242,7 @@ function matchVacancyId({ vacancy, position, branch } = {}) {
   if (position || branch) {
     const hit = open.find(v =>
       (!position || norm(getVTitle(v)) === norm(position)) &&
-      (!branch   || norm(getVBranch(v)) === norm(branch)));
+      (!branch   || normBranch(getVBranch(v)) === normBranch(branch)));  // ทน prefix "สาขา"
     if (hit) return hit.id || hit.ID;
   }
   return null;
@@ -1432,7 +1464,7 @@ let chatHistory = [];
 
 function buildSystemPrompt() {
   const vacancyList = vacancies.map(v =>
-    `- ${getVTitle(v)} | สาขา: ${getVBranch(v)||'-'} | สถานะ: ${getVStatus(v)} | อัตรา: ${v.Count||v.Slots||1} | Recruiter: ${v.Reporter||v.Recruiter||'-'}`
+    `- ${getVTitle(v)} | สาขา: ${getVBranch(v)||'-'} | Region: ${getVRegion(v)||'-'} | Area HR: ${getVAreaHR(v)||'-'} | สถานะ: ${getVStatus(v)} | อัตรา: ${v.Count||v.Slots||1}`
   ).join('\n');
 
   const candidateList = candidates.map(c =>
