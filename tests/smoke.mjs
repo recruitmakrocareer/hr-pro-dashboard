@@ -40,6 +40,7 @@ const requiredIds = [
   'c-first', 'c-last', 'c-vacancy', 'c-status', 'kpi-total',
   'v-branch', 'v-title', 'v-opendate', 'v-close-panel', 'v-close-note',
   'filter-region', 'filter-area', 'filter-position', 'trend-card', 'trend-body',
+  'summary-card', 'summary-body',
 ];
 requiredIds.forEach(id =>
   check(`#${id}`, new RegExp(`id=["']${id}["']`).test(html)));
@@ -55,7 +56,7 @@ const requiredFns = [
   'loadSnapshots', 'renderTrend', 'selectTrend',
   // Web Agent tools (client-side)
   'runTool', 'toolResolveBranch', 'toolGetOpenVacancies', 'toolCloseVacancies', 'normBranch', 'toolFilterVacancies',
-  'toolSummarizeVacancies', 'toolOpenForm',
+  'toolSummarizeVacancies', 'toolOpenForm', 'renderSummary',
 ];
 requiredFns.forEach(fn =>
   check(`function ${fn}()`, new RegExp(`function\\s+${fn}\\s*\\(`).test(html)));
