@@ -54,13 +54,13 @@ const requiredFns = [
   'getVRegion', 'getVAreaHR', 'populateVacancyFilters', 'loadBranchMaster', 'branchOf', 'stampDailyKPI',
   'loadSnapshots', 'renderTrend', 'selectTrend',
   // Web Agent tools (client-side)
-  'runTool', 'toolResolveBranch', 'toolGetOpenVacancies', 'toolCloseVacancies', 'normBranch',
+  'runTool', 'toolResolveBranch', 'toolGetOpenVacancies', 'toolCloseVacancies', 'normBranch', 'toolFilterVacancies',
 ];
 requiredFns.forEach(fn =>
   check(`function ${fn}()`, new RegExp(`function\\s+${fn}\\s*\\(`).test(html)));
 
 console.log('3b) Agent tool names (Web Agent Spec) ถูกประกาศใน tools');
-['resolve_branch', 'get_open_vacancies', 'close_vacancies', 'add_vacancy', 'add_vacancies']
+['resolve_branch', 'get_open_vacancies', 'close_vacancies', 'add_vacancy', 'add_vacancies', 'filter_vacancies']
   .forEach(t => check(`tool '${t}'`, new RegExp(`name:\\s*['"]${t}['"]`).test(html)));
 
 console.log('4) CONFIG keys ครบ');

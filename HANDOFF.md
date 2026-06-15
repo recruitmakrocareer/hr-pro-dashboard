@@ -129,6 +129,12 @@
   - secret **optional** `GET_SNAPSHOTS_URL` — ถ้าไม่ตั้งหรือไม่มีข้อมูล การ์ดจะถูกซ่อน (ไม่รก)
   - **▶️ ผู้ใช้ต้องทำ:** flow GET คืน `value[]` ของ List KPISnapshot (Date/Total/Open/Close/Candidates) + ตั้ง secret `GET_SNAPSHOTS_URL`
 
+## 🆕 ทำเพิ่ม (session นี้ — Generative UI: agent สั่งกรองตารางได้)
+- tool ใหม่ `filter_vacancies({status?,position?,branch?,region?,area?,search?})` — agent สั่งกรอง "และอัปเดตตาราง Dashboard จริง"
+- `toolFilterVacancies()` หา canonical value (ทน case/บางส่วน) → set filter controls → `applyFilter()` → `showPage('dashboard')` → คืน count+list ให้ agent สรุป
+- ตัวอย่าง: "หาตำแหน่งว่าง Region West Central" → agent เรียก `filter_vacancies({region:'West Central', status:'Open'})` → ตารางอัปเดตทันที
+- system prompt + smoke (tool name + `toolFilterVacancies`) อัปเดตแล้ว
+
 ## 🐛 Fix: ตำแหน่ง/สาขา ขึ้น "[object Object]"
 - SharePoint คืน `Position`/`Branch` (และอาจ `Status`/candidate fields) เป็น **object** (lookup/choice/MMD เช่น `{Value}`/`{Label}`/`{LookupValue}`) → render ตรง ๆ เป็น `[object Object]`
 - เพิ่ม helper `fieldText(val)` ดึง string จาก object ทน ๆ + `getVBranch(v)` และให้ `getVStatus/getVTitle` ใช้ `fieldText`
