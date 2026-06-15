@@ -135,6 +135,16 @@
 - ตัวอย่าง: "หาตำแหน่งว่าง Region West Central" → agent เรียก `filter_vacancies({region:'West Central', status:'Open'})` → ตารางอัปเดตทันที
 - system prompt + smoke (tool name + `toolFilterVacancies`) อัปเดตแล้ว
 
+## 🆕 ทำเพิ่ม (session นี้ — sync จาก Backlog ทีมกลยุทธ์: F1/F2/F3/F4/D3/E3)
+ดู `docs/BACKLOG.md` (แผนเต็มจากทีมกลยุทธ์)
+- **F1** `BRANCHES` ตัด prefix "สาขา" (`.map(strip)`) → ตรงกับ `JobVacancy.Branch` ที่ seed (180 records)
+- **F2** `POSITIONS` 26 → **32 รายการ** ตรง Choice ใน SharePoint
+- **F3** Close Vacancy POST ใช้ field **`CloseDate`** (ไม่ใช่ `ClosedDate`) ตาม schema จริง + `CloseNote`
+- **F4** BranchMaster เก็บเพิ่ม `nameEN`/`od`/`regionalCEO`
+- **D3** `resolve_branch` คืน `location_code`/`name_en`/`region`/`area_hr`/`od`/`regional_ceo` จาก BranchMaster
+- **E3** guard เตือน console เมื่อจำนวนข้อมูลเป็นเลขกลม (100/500/1000/5000) = อาจถูก truncate
+- ⚠️ Close Vacancy: IT ยังต้องเพิ่ม column `CloseNote` + flow `HR_CLOSE_Vacancy` (ฝั่งเว็บพร้อมแล้ว)
+
 ## 🐛 Fix: ตำแหน่ง/สาขา ขึ้น "[object Object]"
 - SharePoint คืน `Position`/`Branch` (และอาจ `Status`/candidate fields) เป็น **object** (lookup/choice/MMD เช่น `{Value}`/`{Label}`/`{LookupValue}`) → render ตรง ๆ เป็น `[object Object]`
 - เพิ่ม helper `fieldText(val)` ดึง string จาก object ทน ๆ + `getVBranch(v)` และให้ `getVStatus/getVTitle` ใช้ `fieldText`
