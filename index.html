@@ -2020,7 +2020,7 @@ function renderSummary(d) {
   const rows = d.groups.map((g, i) => {
     const clickable = filterId && g.key && g.key !== '(ไม่ระบุ)';
     const attrs = clickable
-      ? ` class="sum-row clickable" onclick="filterBySummaryGroup(${JSON.stringify(g.key)}, this)" title="คลิกเพื่อดูรายการตำแหน่งของ ${g.key}"`
+      ? ` class="sum-row clickable" onclick="filterBySummaryGroup(${i}, this)" title="คลิกเพื่อดูรายการตำแหน่งของ ${g.key}"`
       : ` class="sum-row"`;
     return `
     <div${attrs}>
@@ -2038,9 +2038,11 @@ function renderSummary(d) {
 }
 
 // คลิกแถบในกราฟ → กรองตารางรายการตำแหน่งงานให้ตรงกับแถบนั้น (group + สถานะของกราฟ)
-function filterBySummaryGroup(key, rowEl) {
+// รับ index ของแถบ (กัน escaping ชื่อ key ที่มีอักขระพิเศษในแอตทริบิวต์ onclick)
+function filterBySummaryGroup(idx, rowEl) {
   const d = lastSummary;
-  if (!d) return;
+  if (!d || !d.groups || !d.groups[idx]) return;
+  const key = d.groups[idx].key;
   const filterId = SUMMARY_FILTER_ID[d.group_by];
   if (!filterId) return;
 
