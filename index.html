@@ -134,9 +134,14 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14
 .trend-empty{font-size:12px;color:var(--text-3);text-align:center;padding:18px 0}
 /* summary (generative UI) */
 .sum-row{display:flex;align-items:center;gap:10px;margin:7px 0;font-size:13px}
+.sum-row.clickable{cursor:pointer;padding:3px 6px;margin:4px -6px;border-radius:8px;transition:background .15s}
+.sum-row.clickable:hover{background:var(--bg)}
+.sum-row.clickable:hover .sum-bar{background:var(--primary)}
+.sum-row.active{background:var(--primary-soft,rgba(99,102,241,.12))}
+.sum-row.active .sum-bar{background:var(--primary)}
 .sum-label{width:170px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
 .sum-barwrap{flex:1;background:var(--bg);border-radius:6px;overflow:hidden;height:18px}
-.sum-bar{display:block;height:100%;background:var(--primary-light);border-radius:6px;min-width:2px;transition:width .3s}
+.sum-bar{display:block;height:100%;background:var(--primary-light);border-radius:6px;min-width:2px;transition:width .3s,background .15s}
 .sum-val{width:64px;text-align:right;flex-shrink:0;font-weight:600;color:var(--primary)}
 
 /* ===================== BUTTONS ===================== */
@@ -2000,21 +2005,64 @@ function toolSummarizeVacancies({ group_by = 'region', status = '', top = 10, co
 }
 
 const GROUP_LABEL = { region: 'Region', branch: 'สาขา', position: 'ตำแหน่ง', area: 'Area HR', status: 'สถานะ', od: 'OD' };
+// แมป group_by → id ของ <select> ตัวกรองในตารางรายการตำแหน่งงาน (od ไม่มีตัวกรอง → คลิกไม่ได้)
+const SUMMARY_FILTER_ID = { region: 'filter-region', branch: 'filter-branch', position: 'filter-position', area: 'filter-area', status: 'filter-status' };
+let lastSummary = null;   // เก็บข้อมูลสรุปล่าสุดไว้ให้ตัว handler ตอนคลิกกราฟ
+
 function renderSummary(d) {
+  lastSummary = d;
   const sortKey = d.count_mode === 'vacancies' ? 'vacancies' : 'slots';
   const unit = sortKey === 'vacancies' ? 'รายการ' : 'อัตรา';
+  const filterId = SUMMARY_FILTER_ID[d.group_by];   // คลิกกรองได้เฉพาะ group ที่มีตัวกรองตรงกัน
   document.getElementById('summary-title').textContent =
     `สรุปตาม ${GROUP_LABEL[d.group_by] || d.group_by}` + (d.status && d.status !== 'ทั้งหมด' ? ` · ${d.status}` : '');
   const max = Math.max(...d.groups.map(g => g[sortKey]), 1);
-  const rows = d.groups.map((g, i) => `
-    <div class="sum-row">
+  const rows = d.groups.map((g, i) => {
+    const clickable = filterId && g.key && g.key !== '(ไม่ระบุ)';
+    const attrs = clickable
+      ? ` class="sum-row clickable" onclick="filterBySummaryGroup(${JSON.stringify(g.key)}, this)" title="คลิกเพื่อดูรายการตำแหน่งของ ${g.key}"`
+      : ` class="sum-row"`;
+    return `
+    <div${attrs}>
       <span class="sum-label" title="${g.key}">${i + 1}. ${g.key}</span>
       <span class="sum-barwrap"><span class="sum-bar" style="width:${(g[sortKey] / max * 100).toFixed(0)}%"></span></span>
       <span class="sum-val">${g[sortKey]} ${unit}</span>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+  const hint = filterId
+    ? `<div style="font-size:12px;color:var(--text-3);margin-bottom:8px">รวม ${d.total_vacancies} รายการ · ${d.total_slots} อัตรา · <span style="color:var(--primary)">👆 คลิกแถบเพื่อดูรายการตำแหน่งของ${GROUP_LABEL[d.group_by] || d.group_by}นั้น</span></div>`
+    : `<div style="font-size:12px;color:var(--text-3);margin-bottom:8px">รวม ${d.total_vacancies} รายการ · ${d.total_slots} อัตรา</div>`;
   document.getElementById('summary-body').innerHTML =
-    `<div style="font-size:12px;color:var(--text-3);margin-bottom:8px">รวม ${d.total_vacancies} รายการ · ${d.total_slots} อัตรา</div>${rows || '<div class="trend-empty">ไม่พบข้อมูล</div>'}`;
+    `${hint}${rows || '<div class="trend-empty">ไม่พบข้อมูล</div>'}`;
   document.getElementById('summary-card').style.display = '';
+}
+
+// คลิกแถบในกราฟ → กรองตารางรายการตำแหน่งงานให้ตรงกับแถบนั้น (group + สถานะของกราฟ)
+function filterBySummaryGroup(key, rowEl) {
+  const d = lastSummary;
+  if (!d) return;
+  const filterId = SUMMARY_FILTER_ID[d.group_by];
+  if (!filterId) return;
+
+  // ล้างตัวกรองอื่น ๆ ก่อน เพื่อไม่ให้ค่ากรองเดิมมารบกวนรายการที่ควรตรงกับกราฟ
+  ['filter-status','filter-position','filter-branch','filter-region','filter-area'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  const search = document.getElementById('filter-search'); if (search) search.value = '';
+
+  // ตั้งสถานะตามที่กราฟกรองไว้ (เช่น "สรุปตาม สาขา · Open" → กรองเฉพาะ Open)
+  if (d.status && d.status !== 'ทั้งหมด' && d.group_by !== 'status') {
+    selectWithValue('filter-status', d.status);
+  }
+  // ตั้งตัวกรองของ group ที่คลิก (selectWithValue เพิ่ม option ชั่วคราวถ้าค่าไม่อยู่ในรายการ)
+  selectWithValue(filterId, key);
+  applyFilter();
+
+  // ไฮไลต์แถบที่เลือก + เลื่อนไปที่ตารางให้เห็นผลลัพธ์
+  document.querySelectorAll('#summary-body .sum-row').forEach(r => r.classList.remove('active'));
+  if (rowEl && rowEl.classList) rowEl.classList.add('active');
+  const tbl = document.getElementById('vacancy-tbody');
+  if (tbl && tbl.closest('.panel')) tbl.closest('.panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // D2 — เปิด modal ฟอร์มจากแชท (generative action) + pre-fill ถ้ามี
