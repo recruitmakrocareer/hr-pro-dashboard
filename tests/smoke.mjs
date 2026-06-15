@@ -56,7 +56,7 @@ const requiredFns = [
   'loadSnapshots', 'renderTrend', 'selectTrend',
   // Web Agent tools (client-side)
   'runTool', 'toolResolveBranch', 'toolGetOpenVacancies', 'toolCloseVacancies', 'normBranch', 'toolFilterVacancies',
-  'toolSummarizeVacancies', 'toolOpenForm', 'renderSummary',
+  'toolSummarizeVacancies', 'toolOpenForm', 'renderSummary', 'filterBySummaryGroup',
 ];
 requiredFns.forEach(fn =>
   check(`function ${fn}()`, new RegExp(`function\\s+${fn}\\s*\\(`).test(html)));
