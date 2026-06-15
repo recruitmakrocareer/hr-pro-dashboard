@@ -1628,6 +1628,10 @@ ${candidateList || 'ไม่มีข้อมูล'}
 - close_vacancies(vacancy_ids): ปิด vacancy หลายรายการ — vacancy_ids ต้องมาจาก output ของ get_open_vacancies เท่านั้น
   เรียกได้ "หลังผู้ใช้ยืนยันแล้วเท่านั้น" ห้ามเรียกโดยไม่ยืนยัน
 - add_vacancy / add_vacancies: เปิดตำแหน่งงานใหม่ 1 หรือหลายตำแหน่ง
+- filter_vacancies({status?,position?,branch?,region?,area?,search?}): กรอง "และแสดงผลบนตาราง Dashboard จริง" (Generative UI)
+  ใช้เมื่อผู้ใช้ขอ "หา/กรอง/แสดง/ดู" ตำแหน่งงานตามเงื่อนไข เช่น "หาตำแหน่งว่าง Region West Central" → เรียก filter_vacancies({region:"West Central", status:"Open"})
+  ส่งเฉพาะ field ที่ผู้ใช้ระบุ; ตารางบนหน้าจอจะอัปเดตทันที แล้วสรุปจำนวน/รายการที่พบให้ผู้ใช้สั้น ๆ
+  (ต่างจาก get_open_vacancies ที่ใช้เฉพาะ flow ปิด vacancy — filter_vacancies ใช้แสดงผลบน UI)
 
 ## เปิด vacancy — ข้อมูลที่ต้องการ
 1.สาขา (เรียก resolve_branch) 2.ตำแหน่ง (จาก list) 3.จำนวนอัตรา 4.ความเร่งด่วน (ด่วน/ปกติ) 5.ชื่อผู้แจ้ง
@@ -1722,6 +1726,21 @@ const AGENT_TOOLS = [
         }
       },
       required: ['vacancies']
+    }
+  },
+  {
+    name: 'filter_vacancies',
+    description: 'กรอง/แสดงรายการตำแหน่งงานบนหน้า Dashboard ตามเงื่อนไข แล้วอัปเดต UI ตารางจริง (generative UI) — ใช้เมื่อผู้ใช้ขอ "หา/กรอง/แสดง/ดู" ตำแหน่งงานตาม region/สาขา/ตำแหน่ง/สถานะ เช่น "หาตำแหน่งว่าง Region West Central". ส่งเฉพาะ field ที่ผู้ใช้ระบุ',
+    input_schema: {
+      type: 'object',
+      properties: {
+        status:   { type: 'string', enum: ['Open', 'Close', 'Hold'], description: 'สถานะ (Open=เปิดรับ)' },
+        position: { type: 'string', description: 'ชื่อตำแหน่ง' },
+        branch:   { type: 'string', description: 'ชื่อสาขา (ไทย)' },
+        region:   { type: 'string', description: 'Region เช่น "West Central", "Bangkok East"' },
+        area:     { type: 'string', description: 'Area HR' },
+        search:   { type: 'string', description: 'คำค้นในชื่อตำแหน่ง' },
+      }
     }
   }
 ];
@@ -1833,8 +1852,56 @@ async function runTool(tu, containerId) {
     case 'close_vacancies':    return await toolCloseVacancies(inp, containerId);
     case 'add_vacancy':        return await toolAddVacancy(inp, containerId);
     case 'add_vacancies':      return await toolAddVacancies(inp, containerId);
+    case 'filter_vacancies':   return toolFilterVacancies(inp);
     default:                   return JSON.stringify({ error: `unknown tool: ${tu.name}` });
   }
+}
+
+// Generative UI — agent สั่งกรองตารางบน Dashboard จริง: set ค่า filter controls แล้ว applyFilter()
+function toolFilterVacancies(inp = {}) {
+  const norm = s => (s ?? '').toString().trim().toLowerCase();
+  // หาค่า canonical ที่ตรงกับข้อมูลจริง (ทน case/ช่องว่าง/บางส่วน) เพื่อให้ filter ของ UI (เทียบแบบ exact) match ได้
+  const canon = (vals, input) => {
+    if (!input) return '';
+    const n = norm(input);
+    const arr = [...new Set(vals.filter(Boolean))];
+    return arr.find(v => norm(v) === n) || arr.find(v => norm(v).includes(n)) || input;
+  };
+  const crit = {
+    status:   inp.status ? (norm(inp.status) === 'open' ? 'Open' : norm(inp.status).startsWith('clos') ? 'Close' : norm(inp.status) === 'hold' ? 'Hold' : inp.status) : '',
+    position: canon(vacancies.map(getVTitle), inp.position),
+    branch:   canon(vacancies.map(getVBranch), inp.branch),
+    region:   canon(vacancies.map(getVRegion), inp.region),
+    area:     canon(vacancies.map(getVAreaHR), inp.area),
+    search:   inp.search || '',
+  };
+  // set UI controls (selectWithValue เพิ่ม option ถ้าไม่มี; ค่าว่าง = เลือก "ทุก...")
+  selectWithValue('filter-status', crit.status);
+  selectWithValue('filter-position', crit.position);
+  selectWithValue('filter-branch', crit.branch);
+  selectWithValue('filter-region', crit.region);
+  selectWithValue('filter-area', crit.area);
+  const s = document.getElementById('filter-search'); if (s) s.value = crit.search;
+  applyFilter();                 // อัปเดตตารางจริง
+  showPage('dashboard');         // พาผู้ใช้มาเห็นตาราง (สำคัญบนมือถือ)
+
+  const f = vacancies.filter(v =>
+    (!crit.status   || getVStatus(v) === crit.status) &&
+    (!crit.position || getVTitle(v) === crit.position) &&
+    (!crit.branch   || normBranch(getVBranch(v)) === normBranch(crit.branch)) &&
+    (!crit.region   || getVRegion(v) === crit.region) &&
+    (!crit.area     || getVAreaHR(v) === crit.area) &&
+    (!crit.search   || getVTitle(v).toLowerCase().includes(norm(crit.search)))
+  );
+  const applied = Object.fromEntries(Object.entries(crit).filter(([, v]) => v));
+  return JSON.stringify({
+    applied, count: f.length,
+    vacancies: f.slice(0, 50).map(v => ({
+      position: getVTitle(v), branch: getVBranch(v), region: getVRegion(v),
+      area: getVAreaHR(v), status: getVStatus(v), count: v.Count || v.Slots || 1,
+    })),
+    message: `กรองแล้ว พบ ${f.length} ตำแหน่ง — อัปเดตตารางบน Dashboard แล้ว`
+  });
 }
 
 async function sendChatCore(text, inputId, containerId) {
