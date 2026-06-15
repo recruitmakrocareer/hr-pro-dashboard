@@ -1641,6 +1641,10 @@ ${candidateList || 'ไม่มีข้อมูล'}
   ใช้เมื่อผู้ใช้ขอ "หา/กรอง/แสดง/ดู" ตำแหน่งงานตามเงื่อนไข เช่น "หาตำแหน่งว่าง Region West Central" → เรียก filter_vacancies({region:"West Central", status:"Open"})
   ส่งเฉพาะ field ที่ผู้ใช้ระบุ; ตารางบนหน้าจอจะอัปเดตทันที แล้วสรุปจำนวน/รายการที่พบให้ผู้ใช้สั้น ๆ
   (ต่างจาก get_open_vacancies ที่ใช้เฉพาะ flow ปิด vacancy — filter_vacancies ใช้แสดงผลบน UI)
+- summarize_vacancies({group_by,status?,top?,count_mode?}): สรุป/วิเคราะห์ เช่น "นับตำแหน่งว่างต่อ Region" → group_by:"region", status:"Open"
+  "Top 5 สาขาขาดคนมากสุด" → group_by:"branch", status:"Open", top:5 (count_mode default=slots=จำนวนอัตรา). นำผลมาตอบเป็นตาราง markdown สั้น ๆ
+- open_form({form,position?,branch?}): เปิด modal ให้ผู้ใช้กรอกเอง เมื่อขอ "เพิ่มผู้สมัคร" (form:"candidate") หรือ "เพิ่ม/เปิดตำแหน่งงานแบบกรอกเอง" (form:"vacancy")
+  ต่างจาก add_vacancy: open_form ให้ผู้ใช้กรอกในฟอร์ม ส่วน add_vacancy บันทึกทันที — ถ้าผู้ใช้ให้ข้อมูลครบใช้ add_vacancy, ถ้าอยากกรอกเองใช้ open_form
 
 ## เปิด vacancy — ข้อมูลที่ต้องการ
 1.สาขา (เรียก resolve_branch) 2.ตำแหน่ง (จาก list) 3.จำนวนอัตรา 4.ความเร่งด่วน (ด่วน/ปกติ) 5.ชื่อผู้แจ้ง
@@ -1750,6 +1754,32 @@ const AGENT_TOOLS = [
         area:     { type: 'string', description: 'Area HR' },
         search:   { type: 'string', description: 'คำค้นในชื่อตำแหน่ง' },
       }
+    }
+  },
+  {
+    name: 'summarize_vacancies',
+    description: 'สรุป/วิเคราะห์ตำแหน่งงานแบบ group เช่น "นับตำแหน่งว่างต่อ Region", "Top 5 สาขาที่ขาดคนมากสุด", "สรุปตามตำแหน่ง" คืนตัวเลขให้นำไปตอบ/ทำตาราง',
+    input_schema: {
+      type: 'object',
+      properties: {
+        group_by: { type: 'string', enum: ['region', 'branch', 'position', 'area', 'status', 'od'], description: 'จัดกลุ่มตามอะไร (default region)' },
+        status:   { type: 'string', enum: ['Open', 'Close', 'Hold'], description: 'กรองสถานะก่อนสรุป (เช่น Open = ตำแหน่งว่าง)' },
+        top:      { type: 'number', description: 'เอากี่อันดับแรก (default 10)' },
+        count_mode: { type: 'string', enum: ['slots', 'vacancies'], description: 'นับด้วยจำนวนอัตรา (slots, default) หรือจำนวนรายการ (vacancies)' },
+      }
+    }
+  },
+  {
+    name: 'open_form',
+    description: 'เปิดฟอร์ม (modal) บนหน้าจอให้ผู้ใช้กรอก เมื่อผู้ใช้ขอ "เพิ่มผู้สมัคร" หรือ "เพิ่ม/เปิดตำแหน่งงาน" และต้องการกรอกเอง — pre-fill ค่าที่ระบุได้',
+    input_schema: {
+      type: 'object',
+      properties: {
+        form:     { type: 'string', enum: ['candidate', 'vacancy'], description: 'ฟอร์มที่จะเปิด' },
+        position: { type: 'string', description: 'ตำแหน่ง (pre-fill)' },
+        branch:   { type: 'string', description: 'สาขา (pre-fill)' },
+      },
+      required: ['form']
     }
   }
 ];
@@ -1869,6 +1899,8 @@ async function runTool(tu, containerId) {
     case 'add_vacancy':        return await toolAddVacancy(inp, containerId);
     case 'add_vacancies':      return await toolAddVacancies(inp, containerId);
     case 'filter_vacancies':   return toolFilterVacancies(inp);
+    case 'summarize_vacancies':return toolSummarizeVacancies(inp);
+    case 'open_form':          return toolOpenForm(inp);
     default:                   return JSON.stringify({ error: `unknown tool: ${tu.name}` });
   }
 }
@@ -1918,6 +1950,51 @@ function toolFilterVacancies(inp = {}) {
     })),
     message: `กรองแล้ว พบ ${f.length} ตำแหน่ง — อัปเดตตารางบน Dashboard แล้ว`
   });
+}
+
+// D1 — สรุป/วิเคราะห์ตำแหน่งงานแบบ group (คืนตัวเลขให้ agent นำไปตอบ/ทำตาราง)
+function toolSummarizeVacancies({ group_by = 'region', status = '', top = 10, count_mode = 'slots' } = {}) {
+  const getKey = {
+    region: getVRegion, branch: getVBranch, position: getVTitle, area: getVAreaHR,
+    status: getVStatus, od: v => fieldText(v.OD),
+  }[(group_by || 'region').toLowerCase()] || getVRegion;
+  const rows = vacancies.filter(v => !status || getVStatus(v) === status);
+  const agg = {};
+  for (const v of rows) {
+    const k = getKey(v) || '(ไม่ระบุ)';
+    if (!agg[k]) agg[k] = { key: k, vacancies: 0, slots: 0 };
+    agg[k].vacancies += 1;
+    agg[k].slots += (Number(v.Count || v.Slots || 1) || 1);
+  }
+  const sortKey = count_mode === 'vacancies' ? 'vacancies' : 'slots';
+  const groups = Object.values(agg).sort((a, b) => b[sortKey] - a[sortKey]).slice(0, top || 10);
+  return JSON.stringify({
+    group_by, status: status || 'ทั้งหมด', count_mode,
+    total_vacancies: rows.length,
+    total_slots: rows.reduce((s, v) => s + (Number(v.Count || v.Slots || 1) || 1), 0),
+    groups,
+    message: `สรุปตาม ${group_by}${status ? ` (สถานะ ${status})` : ''} — ${groups.length} กลุ่ม`
+  });
+}
+
+// D2 — เปิด modal ฟอร์มจากแชท (generative action) + pre-fill ถ้ามี
+function toolOpenForm({ form, position, branch } = {}) {
+  const f = (form || '').toLowerCase();
+  const canonList = (list, val) => {
+    if (!val) return '';
+    const n = val.toString().trim().toLowerCase();
+    return list.find(x => x.toLowerCase() === n) || list.find(x => x.toLowerCase().includes(n)) || val;
+  };
+  if (f.includes('cand') || f.includes('applicant') || f.includes('ผู้สมัคร')) {
+    openCandidateModal({ position: canonList(POSITIONS, position), branch: canonList(BRANCHES, branch) });
+    showPage('dashboard');
+    return JSON.stringify({ opened: 'candidate', message: 'เปิดฟอร์มเพิ่มผู้สมัครให้แล้ว กรุณากรอกข้อมูล' });
+  }
+  openVacancyModal();
+  if (position) selectWithValue('v-title', canonList(POSITIONS, position));
+  if (branch)   selectWithValue('v-branch', canonList(BRANCHES, branch));
+  showPage('dashboard');
+  return JSON.stringify({ opened: 'vacancy', message: 'เปิดฟอร์มเพิ่มตำแหน่งงานให้แล้ว กรุณากรอกข้อมูล' });
 }
 
 async function sendChatCore(text, inputId, containerId) {

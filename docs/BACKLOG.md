@@ -51,8 +51,8 @@
 
 | ID | Task | ผู้รับผิดชอบ | Effort | Acceptance | สถานะ |
 |---|---|---|---|---|---|
-| D1 | สรุปเชิงวิเคราะห์จากแชท: "นับตำแหน่งว่างต่อ Region", "Top 5 สาขาขาดคน" | Dev | M | agent ตอบ + (option) แสดงตาราง/ชาร์ต | ✅ data พร้อมแล้ว (Region field มีใน JobVacancy ทุก record) |
-| D2 | สั่งเปิด modal เพิ่มตำแหน่ง/ผู้สมัครจากแชท (generative action) | Dev | S | พิมพ์สั่งแล้ว modal เด้ง pre-fill | ค้าง |
+| D1 | สรุปเชิงวิเคราะห์จากแชท: "นับตำแหน่งว่างต่อ Region", "Top 5 สาขาขาดคน" | Dev | M | agent ตอบ + (option) แสดงตาราง/ชาร์ต | ✅ **ทำแล้ว (web session)** — tool `summarize_vacancies` |
+| D2 | สั่งเปิด modal เพิ่มตำแหน่ง/ผู้สมัครจากแชท (generative action) | Dev | S | พิมพ์สั่งแล้ว modal เด้ง pre-fill | ✅ **ทำแล้ว (web session)** — tool `open_form` |
 | D3 | `resolve_branch` แบบเต็ม (location_code/region/Area HR) ผ่าน BranchMaster ที่โหลดแล้ว | Dev | S | agent ตอบ Area HR/Region ของสาขาได้ | ✅ **ทำแล้ว (web session)** — resolve_branch คืน location_code/name_en/region/area_hr/od/regional_ceo |
 | D4 | TD-02: ออกแบบ Candidate Stage Model (pipeline) ก่อนเพิ่มฟีเจอร์ผู้สมัคร | Design+Biz | L | มี state model อนุมัติแล้ว | ค้าง |
 
@@ -155,8 +155,12 @@ Store General Manager (SGM)
 - **D3** `resolve_branch` คืน location_code/name_en/region/area_hr/od/regional_ceo
 - **E3** guard เตือน console เมื่อข้อมูลอาจถูก truncate (100/500/1000/5000)
 
+### Dev update รอบ 2 (2026-06-15)
+- **D1** tool `summarize_vacancies` (group by region/branch/position/area/status/od, top N, slots/vacancies)
+- **D2** tool `open_form` (เปิด modal candidate/vacancy จากแชท + pre-fill)
+
 ### ยังเหลือฝั่ง Dev (ทำต่อได้)
-- B1/B2 (ทดสอบ POST candidate + CV column), D1 (analytics จากแชท), D2 (สั่งเปิด modal จากแชท), F5 (verify 180 records)
+- B1/B2 (ทดสอบ POST candidate + CV column), F5 (verify 180 records บน production)
 
 ### ต้องรอฝั่ง IT/Biz
 - A1–A3 (KPI snapshot flow), C1–C2 (column `CloseNote` + flow close), E1 (regenerate sig), C3/D4/E4 (รอ business)
