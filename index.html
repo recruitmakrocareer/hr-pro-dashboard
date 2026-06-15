@@ -718,16 +718,18 @@ console.log('[CONFIG] URLs present?', {
 });
 
 // ===================== MASTER DATA =====================
+// F2: ตำแหน่ง 32 รายการ ตรงกับ Choice ใน SharePoint (Position Master)
 const POSITIONS = [
-  "ASGM","Fresh Manager","Section Manager - Customer Service","Sales Manager",
-  "Section Manager - B2B Sales","Section Manager - Bakery",
-  "Section Manager - Butchery","Manager - Key Account",
-  "Section Manager - Frozen","Section Manager - Dry Food 1","Section Manager - Dry Food 2",
-  "Assistant Food Shop Manager","Section Manager - Frozen Shop","Section Manager - F&V",
-  "Section Manager - GA","Section Manager - GR","Section Manager - Non Food 1",
-  "Section Manager - Non Fresh","Section Manager - O2O Delivery","Section Manager-O2O Operation",
-  "Order Fulfillment Manager","Section Manager - Store OCS","Section Mgr.-Order Fulfillment",
-  "Section Manager - Fish","Section Manager - Store System","Section Manager-Human Resource",
+  "ASGM","Assistant Store Manager","Asst. FS Store Manager","FS Store Manager",
+  "Food/Fresh Shop Manager","Fresh Manager","Manager - Key Account","Order Fulfillment Manager",
+  "Sales Manager","Section Manager - ALC","Section Manager - ALC & Admin","Section Manager - B2B Sales",
+  "Section Manager - Bakery","Section Manager - Butchery","Section Manager - Credit Sales",
+  "Section Manager - Dry Food 1","Section Manager - Dry Food 2","Section Manager - F&V",
+  "Section Manager - Fish","Section Manager - Frozen","Section Manager - GA","Section Manager - GR",
+  "Section Manager - General Affair","Section Manager - HR","Section Manager - Non Food 1",
+  "Section Manager - Non Fresh","Section Manager - O2O Delivery","Section Manager - Siam Frozen",
+  "Section Manager - Store OCS","Section Manager-O2O Operation","Section Mgr.-Customer Service",
+  "Store General Manager (SGM)",
 ];
 
 const BRANCHES = [
@@ -766,7 +768,7 @@ const BRANCHES = [
   "สาขาพังงา (ตะกั่วป่า)","สาขาอำนาจเจริญ","สาขาจอหอ (นครราชสีมา)","สาขาบ้านไผ่",
   "Food Shop พระราม 4","Food Shop ศิริมังคลาจารย์","Fresh Shop รามอินทรา กม 4",
   "Fresh Shop ชิโนปาร์ค","Fresh Shop พัฒนาการ",
-];
+].map(b => b.replace(/^สาขา\s*/, ''));  // F1: ใช้รูปแบบไม่มี prefix "สาขา" ให้ตรงกับ JobVacancy.Branch ที่ seed ไว้
 
 // ===================== STATE =====================
 let vacancies = [];
@@ -964,7 +966,10 @@ async function loadBranchMaster() {
       const code   = fieldText(b.Title) || fieldText(b.LocationCode);
       const areaHR = fieldText(b.AreaHR) || fieldText(b['Area HR']) || fieldText(b.AreaHRName) || fieldText(b.Area_HR) || fieldText(b.Area);
       const region = fieldText(b.Region);
-      const rec = { areaHR, region, nameTH, locationCode: code };
+      const nameEN = fieldText(b.NameEN) || fieldText(b.NameEn);
+      const od     = fieldText(b.OD);
+      const regionalCEO = fieldText(b.RegionalCEO) || fieldText(b.RegionalCeo);
+      const rec = { areaHR, region, nameTH, nameEN, od, regionalCEO, locationCode: code };
       if (id)     map['#id:' + id] = rec;            // คีย์หลัก: BranchMaster item ID (ตรงกับ JobVacancy.Branch#Id — แม่นสุด)
       if (nameTH) map[normBranch(nameTH)] = rec;     // คีย์สำรอง: ชื่อสาขาไทย
       if (code)   map['#code:' + code.toLowerCase()] = rec;
@@ -986,6 +991,9 @@ async function loadVacancies() {
       });
       const data = await res.json();
       const allItems = data.value || [];
+      // E3: เตือนถ้าจำนวนเป็นเลขกลม ๆ ที่น่าสงสัยว่าโดน truncate (flow ลืมเปิด Pagination)
+      if ([100, 500, 1000, 5000].includes(allItems.length))
+        console.warn(`[loadVacancies] ⚠️ ได้ ${allItems.length} รายการพอดี — น่าสงสัยว่าข้อมูลถูกตัด (เช็ก Pagination ใน flow)`);
       vacancies = allItems.filter(v => !isEmptyVacancy(v));   // กรองแถวว่างจาก List ออก
       const dropped = allItems.length - vacancies.length;
       if (dropped > 0) console.warn(`[loadVacancies] ข้าม ${dropped} แถวว่าง (ไม่มีตำแหน่ง/สาขา) จากทั้งหมด ${allItems.length} → เหลือ ${vacancies.length}`);
@@ -1326,7 +1334,8 @@ async function confirmCloseVacancy() {
 
   const today = new Date().toISOString().split('T')[0];
   // ClosedBy ปล่อยให้ flow ประทับจากผู้ใช้ของ SharePoint connection (หน้าเว็บยังไม่มีระบบ login)
-  const payload = { id: parseInt(spId, 10), Status: 'Close', ClosedDate: today };
+  // F3: ใช้ field 'CloseDate' ตรงกับ schema จริงใน JobVacancy (ไม่ใช่ 'ClosedDate')
+  const payload = { id: parseInt(spId, 10), Status: 'Close', CloseDate: today };
   if (note) payload.CloseNote = note;  // ส่งหมายเหตุการปิดถ้ามี (flow/SharePoint จะ map เมื่อมี column รองรับ)
   const url = CONFIG.CLOSE_VACANCY_URL || CONFIG.POST_VACANCY_URL;
   const btn = document.getElementById('v-close-confirm');
@@ -1763,8 +1772,15 @@ function toolResolveBranch({ branch_input }) {
     const suggestions = BRANCHES.filter(b => normBranch(b).includes(n)).slice(0, 5);
     return JSON.stringify({ found: false, message: 'ไม่พบสาขาที่ระบุ', suggestions });
   }
-  // ระบบนี้ไม่มี location_code mapping → ใช้ name_th (ชื่อสาขาไทย) เป็น key
-  return JSON.stringify({ found: true, name_th: hit, branch: hit, message: `พบสาขา ${hit}` });
+  // D3/F4: แนบข้อมูลจาก BranchMaster ถ้าโหลดไว้ (region/area HR/OD/location_code)
+  const info = branchInfo[normBranch(hit)] || {};
+  return JSON.stringify({
+    found: true, name_th: hit, branch: hit,
+    location_code: info.locationCode || '', name_en: info.nameEN || '',
+    region: info.region || '', area_hr: info.areaHR || '',
+    od: info.od || '', regional_ceo: info.regionalCEO || '',
+    message: `พบสาขา ${hit}`
+  });
 }
 
 function toolGetOpenVacancies({ branch }) {
@@ -1794,7 +1810,7 @@ async function toolCloseVacancies({ vacancy_ids }, containerId) {
     try {
       if (url) {
         const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: parseInt(id, 10), Status: 'Close', ClosedDate: today }) });
+          body: JSON.stringify({ id: parseInt(id, 10), Status: 'Close', CloseDate: today }) });  // F3: CloseDate ตรง schema
         if (!res.ok) { errors.push(`${id}: HTTP ${res.status}`); continue; }
       } else {
         const idx = vacancies.findIndex(v => (v.id || v.ID) == id);
