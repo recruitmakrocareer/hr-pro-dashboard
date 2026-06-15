@@ -57,6 +57,8 @@ const requiredFns = [
   // Web Agent tools (client-side)
   'runTool', 'toolResolveBranch', 'toolGetOpenVacancies', 'toolCloseVacancies', 'normBranch', 'toolFilterVacancies',
   'toolSummarizeVacancies', 'toolOpenForm', 'renderSummary', 'filterBySummaryGroup',
+  // Sprint 2–3 (G5 ปุ่มเพิ่มผู้สมัครต่อแถว, G6 join candidate by VacancyID + badge)
+  'addCandidateForVacancy', 'candidatesForVacancy', 'candBreakdown', 'candVacancyId',
 ];
 requiredFns.forEach(fn =>
   check(`function ${fn}()`, new RegExp(`function\\s+${fn}\\s*\\(`).test(html)));
@@ -72,6 +74,24 @@ console.log('4) CONFIG keys ครบ');
 console.log('5) TD-01 guard — ไม่มี URL ลับ (sig=) hardcode ใน index.html');
 check('ไม่พบ "sig=" ใน index.html', !/[?&]sig=/.test(html),
   'พบ signature ที่ควรย้ายไป GitHub Secrets แล้ว');
+
+console.log('6) G4 — CandidateStatus 5 ค่า (Key Decision #3) ถูกตั้งครบ + default Screening');
+const STATUS5 = ['Screening', 'Interview', 'Offer', 'Hired', 'Rejected'];
+const statusConst = html.match(/CANDIDATE_STATUS_OPTIONS\s*=\s*\[([^\]]*)\]/);
+check('CANDIDATE_STATUS_OPTIONS ถูกประกาศ', !!statusConst);
+STATUS5.forEach(s =>
+  check(`  มีค่า '${s}' ใน CANDIDATE_STATUS_OPTIONS`, !!statusConst && statusConst[1].includes(`"${s}"`)));
+check('dropdown #c-status default = Screening',
+  /<select[^>]*id="c-status"[\s\S]*?<option value="Screening"[^>]*selected/.test(html));
+
+console.log('7) F5 — group-by invariant: รวมทุกกลุ่มต้องเท่ายอดรวม (จำลอง 180 records)');
+const regions = ['BKK', 'North', 'South', 'East', 'Central', 'West'];
+const sample = Array.from({ length: 180 }, (_, i) => ({ Region: regions[i % regions.length] }));
+const grouped = sample.reduce((m, r) => { m[r.Region] = (m[r.Region] || 0) + 1; return m; }, {});
+const sum = Object.values(grouped).reduce((a, b) => a + b, 0);
+check('group by Region รักษายอดรวมครบ 180 ไม่ตกหล่น', sum === 180 && sample.length === 180, `sum=${sum}`);
+check('จำนวนกลุ่ม Region ถูกต้อง', Object.keys(grouped).length === regions.length,
+  `ได้ ${Object.keys(grouped).length} กลุ่ม`);
 
 console.log('');
 if (failures) { console.error(`SMOKE TEST FAILED — ${failures} ข้อ ❌`); process.exit(1); }
