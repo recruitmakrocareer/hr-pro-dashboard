@@ -132,6 +132,12 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14
 .trend-pill.active{background:var(--primary);border-color:var(--primary);color:#fff}
 .trend-body{padding:16px 20px}
 .trend-empty{font-size:12px;color:var(--text-3);text-align:center;padding:18px 0}
+/* summary (generative UI) */
+.sum-row{display:flex;align-items:center;gap:10px;margin:7px 0;font-size:13px}
+.sum-label{width:170px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+.sum-barwrap{flex:1;background:var(--bg);border-radius:6px;overflow:hidden;height:18px}
+.sum-bar{height:100%;background:var(--primary-light);border-radius:6px;min-width:2px;transition:width .3s}
+.sum-val{width:64px;text-align:right;flex-shrink:0;font-weight:600;color:var(--primary)}
 
 /* ===================== BUTTONS ===================== */
 .btn{
@@ -423,6 +429,15 @@ tbody tr:hover{background:#F8F7FF}
           <div class="kpi-value" id="kpi-candidate">—</div>
           <div class="kpi-sub">ทุกตำแหน่ง</div>
         </div>
+      </div>
+
+      <!-- SUMMARY (Generative UI) — agent วาดผลสรุปจาก summarize_vacancies -->
+      <div class="panel" id="summary-card" style="display:none;margin-bottom:16px">
+        <div class="panel-header">
+          <div class="panel-title">📊 <span id="summary-title">สรุป</span></div>
+          <button class="btn btn-sm" onclick="document.getElementById('summary-card').style.display='none'">✕ ปิด</button>
+        </div>
+        <div class="trend-body" id="summary-body"></div>
       </div>
 
       <!-- KPI TREND (minimal) — แสดงเมื่อมีข้อมูล snapshot เท่านั้น -->
@@ -1642,7 +1657,8 @@ ${candidateList || 'ไม่มีข้อมูล'}
   ส่งเฉพาะ field ที่ผู้ใช้ระบุ; ตารางบนหน้าจอจะอัปเดตทันที แล้วสรุปจำนวน/รายการที่พบให้ผู้ใช้สั้น ๆ
   (ต่างจาก get_open_vacancies ที่ใช้เฉพาะ flow ปิด vacancy — filter_vacancies ใช้แสดงผลบน UI)
 - summarize_vacancies({group_by,status?,top?,count_mode?}): สรุป/วิเคราะห์ เช่น "นับตำแหน่งว่างต่อ Region" → group_by:"region", status:"Open"
-  "Top 5 สาขาขาดคนมากสุด" → group_by:"branch", status:"Open", top:5 (count_mode default=slots=จำนวนอัตรา). นำผลมาตอบเป็นตาราง markdown สั้น ๆ
+  "Top 5 สาขาขาดคนมากสุด" → group_by:"branch", status:"Open", top:5 (count_mode default=slots=จำนวนอัตรา)
+  **ผลจะแสดงเป็นกราฟแท่งบน Dashboard อัตโนมัติ** — ตอบผู้ใช้สั้น ๆ (เช่นอันดับ 1-3) ห้ามพิมพ์ตาราง markdown ยาวซ้ำ
 - open_form({form,position?,branch?}): เปิด modal ให้ผู้ใช้กรอกเอง เมื่อขอ "เพิ่มผู้สมัคร" (form:"candidate") หรือ "เพิ่ม/เปิดตำแหน่งงานแบบกรอกเอง" (form:"vacancy")
   ต่างจาก add_vacancy: open_form ให้ผู้ใช้กรอกในฟอร์ม ส่วน add_vacancy บันทึกทันที — ถ้าผู้ใช้ให้ข้อมูลครบใช้ add_vacancy, ถ้าอยากกรอกเองใช้ open_form
 
@@ -1952,7 +1968,7 @@ function toolFilterVacancies(inp = {}) {
   });
 }
 
-// D1 — สรุป/วิเคราะห์ตำแหน่งงานแบบ group (คืนตัวเลขให้ agent นำไปตอบ/ทำตาราง)
+// D1 — สรุป/วิเคราะห์ตำแหน่งงานแบบ group → วาดเป็น Generative UI (กราฟแท่ง) บน Dashboard + คืนตัวเลขให้ agent
 function toolSummarizeVacancies({ group_by = 'region', status = '', top = 10, count_mode = 'slots' } = {}) {
   const getKey = {
     region: getVRegion, branch: getVBranch, position: getVTitle, area: getVAreaHR,
@@ -1968,13 +1984,37 @@ function toolSummarizeVacancies({ group_by = 'region', status = '', top = 10, co
   }
   const sortKey = count_mode === 'vacancies' ? 'vacancies' : 'slots';
   const groups = Object.values(agg).sort((a, b) => b[sortKey] - a[sortKey]).slice(0, top || 10);
-  return JSON.stringify({
+  const result = {
     group_by, status: status || 'ทั้งหมด', count_mode,
     total_vacancies: rows.length,
     total_slots: rows.reduce((s, v) => s + (Number(v.Count || v.Slots || 1) || 1), 0),
     groups,
-    message: `สรุปตาม ${group_by}${status ? ` (สถานะ ${status})` : ''} — ${groups.length} กลุ่ม`
+  };
+  renderSummary(result);          // วาดบนหน้าจอ (Generative UI)
+  showPage('dashboard');
+  return JSON.stringify({
+    ...result,
+    rendered: true,
+    message: `แสดงผลสรุปเป็นกราฟบน Dashboard แล้ว — ตอบผู้ใช้สั้น ๆ (อันดับ 1-3 พอ) ไม่ต้องพิมพ์ตารางซ้ำ`
   });
+}
+
+const GROUP_LABEL = { region: 'Region', branch: 'สาขา', position: 'ตำแหน่ง', area: 'Area HR', status: 'สถานะ', od: 'OD' };
+function renderSummary(d) {
+  const sortKey = d.count_mode === 'vacancies' ? 'vacancies' : 'slots';
+  const unit = sortKey === 'vacancies' ? 'รายการ' : 'อัตรา';
+  document.getElementById('summary-title').textContent =
+    `สรุปตาม ${GROUP_LABEL[d.group_by] || d.group_by}` + (d.status && d.status !== 'ทั้งหมด' ? ` · ${d.status}` : '');
+  const max = Math.max(...d.groups.map(g => g[sortKey]), 1);
+  const rows = d.groups.map((g, i) => `
+    <div class="sum-row">
+      <span class="sum-label" title="${g.key}">${i + 1}. ${g.key}</span>
+      <span class="sum-barwrap"><span class="sum-bar" style="width:${(g[sortKey] / max * 100).toFixed(0)}%"></span></span>
+      <span class="sum-val">${g[sortKey]} ${unit}</span>
+    </div>`).join('');
+  document.getElementById('summary-body').innerHTML =
+    `<div style="font-size:12px;color:var(--text-3);margin-bottom:8px">รวม ${d.total_vacancies} รายการ · ${d.total_slots} อัตรา</div>${rows || '<div class="trend-empty">ไม่พบข้อมูล</div>'}`;
+  document.getElementById('summary-card').style.display = '';
 }
 
 // D2 — เปิด modal ฟอร์มจากแชท (generative action) + pre-fill ถ้ามี
