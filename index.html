@@ -193,6 +193,8 @@ tbody tr:hover{background:#F8F7FF}
 .badge-open{background:var(--accent-light);color:#085041}.badge-open::before{background:#0F6E56}
 .badge-close{background:var(--danger-light);color:#791F1F}.badge-close::before{background:#A32D2D}
 .badge-hold{background:var(--warn-light);color:#633806}.badge-hold::before{background:#854F0B}
+/* G6 — badge จำนวนผู้สมัครต่อ vacancy (ในคอลัมน์ตำแหน่งงาน) */
+.cand-badge{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600;background:var(--accent-light);color:#085041;vertical-align:middle;white-space:nowrap}
 
 /* ===================== CHAT PANEL ===================== */
 .chat-panel{
@@ -672,12 +674,11 @@ tbody tr:hover{background:#F8F7FF}
       <div class="form-group">
         <label class="form-label">สถานะผู้สมัคร</label>
         <select class="form-control" id="c-status">
-          <option value="New">New — ใหม่</option>
-          <option value="Screening">Screening</option>
+          <option value="Screening" selected>Screening</option>
           <option value="Interview">Interview</option>
           <option value="Offer">Offer</option>
-          <option value="Pass">Pass — ผ่าน</option>
-          <option value="Fail">Fail — ไม่ผ่าน</option>
+          <option value="Hired">Hired</option>
+          <option value="Rejected">Rejected</option>
         </select>
       </div>
     </div>
@@ -794,6 +795,8 @@ const BRANCHES = [
 let vacancies = [];
 let candidates = [];
 let editVacancyId = null;
+// G4 — Key Decision #3: สถานะผู้สมัคร 5 ค่า, default = Screening (single source of truth ของ dropdown/badge)
+const CANDIDATE_STATUS_OPTIONS = ["Screening", "Interview", "Offer", "Hired", "Rejected"];
 let branchInfo = {};   // map: normBranch(NameTH) → { areaHR, region, nameTH, locationCode } จาก BranchMaster
 
 // ===================== MOCK DATA (ใช้ตอน Flow ยังไม่พร้อม) =====================
@@ -1072,6 +1075,7 @@ async function loadCandidates() {
       candidates = MOCK_CANDIDATES;
     }
     renderCandidates();
+    if (vacancies.length) renderVacancies();   // G6 — รีเฟรช badge จำนวนผู้สมัครบนตาราง Vacancy หลังโหลด candidates เสร็จ
     updateKPI();
   } catch(e) {
     // production: ถ้า Flow error อย่าโชว์ mock หลอกตา — แสดง list ว่างแทน (ดู console สำหรับสาเหตุ)
@@ -1150,18 +1154,51 @@ function renderVacancies(data) {
       : status==='Close'
       ? `<span class="badge badge-close">ปิดแล้ว</span>`
       : `<span class="badge badge-hold">Hold</span>`;
-    return `<tr onclick="editVacancy(${v.id||v.ID})">
-      <td class="col-title">${getVTitle(v)}</td>
+    // G6 — นับผู้สมัครที่ผูกกับ vacancy นี้ + สรุปสถานะใน tooltip ของ badge
+    const cands = candidatesForVacancy(v);
+    const candBadge = cands.length
+      ? `<span class="cand-badge" title="${candBreakdown(cands)}">👤 ${cands.length}</span>` : '';
+    const vid = v.id||v.ID;
+    return `<tr onclick="editVacancy(${vid})">
+      <td class="col-title">${getVTitle(v)}${candBadge}</td>
       <td>${getVBranch(v)||'-'}</td>
       <td>${badge}</td>
       <td style="text-align:center">${v.Count||v.Slots||1}</td>
       <td>${getVRegion(v)||'-'}</td>
       <td>${getVAreaHR(v)||'-'}</td>
       <td onclick="event.stopPropagation()">
-        <button class="btn btn-sm btn-icon" onclick="editVacancy(${v.id||v.ID})" title="แก้ไข">✏️</button>
+        ${status==='Open'?`<button class="btn btn-sm btn-icon" onclick="addCandidateForVacancy(${vid})" title="เพิ่มผู้สมัครตำแหน่งนี้">👤+</button>`:''}
+        <button class="btn btn-sm btn-icon" onclick="editVacancy(${vid})" title="แก้ไข">✏️</button>
       </td>
     </tr>`;
   }).join('');
+}
+
+// G6 — ผู้สมัครที่ผูกกับ vacancy: เทียบ VacancyID ก่อน, fallback ชื่อตำแหน่ง (mock/legacy ไม่มี VacancyID)
+function candVacancyId(c) {
+  const x = c.VacancyID;
+  return (x && typeof x === 'object') ? (x.Value ?? x.value ?? '') : (x ?? '');
+}
+function candidatesForVacancy(v) {
+  const vid = String(v.id || v.ID);
+  const vtitle = getVTitle(v);
+  return candidates.filter(c => {
+    const cvid = String(candVacancyId(c)).trim();
+    if (cvid) return cvid === vid;
+    return fieldText(c.VacancyTitle) === vtitle;   // ไม่มี VacancyID → เทียบชื่อตำแหน่ง
+  });
+}
+function candBreakdown(cands) {
+  const m = {};
+  cands.forEach(c => { const s = fieldText(c.CandidateStatus) || 'Screening'; m[s] = (m[s]||0)+1; });
+  return Object.entries(m).map(([k,n]) => `${n} ${k}`).join(', ');
+}
+
+// G5 — เปิดฟอร์มเพิ่มผู้สมัครจากแถว Vacancy พร้อม pre-fill ตำแหน่ง/สาขา/VacancyID
+function addCandidateForVacancy(id) {
+  const v = vacancies.find(x => (x.id||x.ID) === id);
+  if (!v) return;
+  openCandidateModal({ vacancy: id, position: getVTitle(v), branch: getVBranch(v) });
 }
 
 function applyFilter() {
@@ -1212,12 +1249,12 @@ function renderCandidates() {
     grid.innerHTML = `<div style="grid-column:1/-1"><div class="empty"><div class="empty-icon">📭</div><div class="empty-text">ยังไม่มีผู้สมัคร</div></div></div>`;
     return;
   }
-  const statusColor = {New:'badge-hold',Screening:'badge-hold',Interview:'badge-open',Offer:'badge-open',Pass:'badge-open',Fail:'badge-close'};
+  const statusColor = {Screening:'badge-hold',Interview:'badge-open',Offer:'badge-open',Hired:'badge-open',Rejected:'badge-close',New:'badge-hold',Pass:'badge-open',Fail:'badge-close'};
   grid.innerHTML = candidates.map(c => {
     // SharePoint อาจคืนชื่อ/ตำแหน่งเป็น object → ใช้ fieldText ให้ทน (กัน "[object Object]")
     const cName = fieldText(c.Title) || '-';
     const cPos = fieldText(c.VacancyTitle) || 'ไม่ระบุตำแหน่ง';
-    const cStatus = fieldText(c.CandidateStatus) || 'New';
+    const cStatus = fieldText(c.CandidateStatus) || 'Screening';
     const initials = (cName !== '-' ? cName : '?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
     const cv = cvLinkOf(c);
     return `<div class="candidate-card">
@@ -1409,7 +1446,9 @@ function openCandidateModal(prefill = {}) {
     const el=document.getElementById(id);
     if(el){el.value='';el.classList.remove('ai-filled');}
   });
-  document.getElementById('c-status').value='New';
+  const stEl = document.getElementById('c-status');
+  stEl.innerHTML = CANDIDATE_STATUS_OPTIONS.map(s => `<option value="${s}">${s}</option>`).join('');
+  stEl.value = 'Screening';   // G4 — default ตาม Key Decision #3
   const vacSel = document.getElementById('c-vacancy');
   vacSel.innerHTML='<option value="">-- เลือกตำแหน่ง --</option>'+
     vacancies.filter(v=>getVStatus(v)==='Open').map(v=>`<option value="${v.id||v.ID}">${getVTitle(v)} — ${getVBranch(v)||'-'}</option>`).join('');
@@ -1566,7 +1605,7 @@ async function saveCandidate() {
     Phone: fieldVal('c-phone'),
     VacancyID: Number.isNaN(vacNum) ? vacancyId : vacNum,  // กัน NaN → ส่งค่าเดิมแทน null
     VacancyTitle: (vac ? getVTitle(vac) : '') || '',
-    CandidateStatus: fieldVal('c-status') || 'New',
+    CandidateStatus: fieldVal('c-status') || 'Screening',
     FileName: cvFileBase64 ? cvFileName : null,
     FileContent: cvFileBase64 || null,
   };
