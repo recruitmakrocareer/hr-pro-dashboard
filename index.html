@@ -1382,35 +1382,56 @@ function hideClosePanel() {
   document.getElementById('v-close-btn').style.display = (spId && status !== 'Close') ? '' : 'none';
 }
 
-// ยืนยันปิดตำแหน่ง — ตั้ง Status='Close' + ClosedDate + ส่งหมายเหตุการปิด (CloseNote) ถ้ามี
-// ใช้ flow เฉพาะ HR_CLOSE_Vacancy (CLOSE_VACANCY_URL) ถ้ามี — ไม่งั้น fallback ไป POST_VACANCY_URL (ตั้ง Status ได้อยู่แล้ว)
+// C2 — เรียก flow HR_CLOSE_Vacancy ตาม contract { id, CloseNote, ClosedBy } → 200 {success,Status,CloseDate} / 409 {closedBy}
+// คืน { ok, conflict, closedBy, error, local } — conflict=true เมื่อ flow ตอบ 409 (ถูกปิดไปแล้วโดยคนอื่น = manual close wins)
+async function postCloseVacancy(spId, note) {
+  const closedBy = (typeof window !== 'undefined' && window.currentUserName) || 'Recruiter';   // ยังไม่มีระบบ login → default
+  if (CONFIG.CLOSE_VACANCY_URL) {
+    const res = await fetch(CONFIG.CLOSE_VACANCY_URL, { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ id: String(spId), CloseNote: note || '', ClosedBy: closedBy }) });
+    const raw = await res.text();
+    let data = {}; try { data = raw ? JSON.parse(raw) : {}; } catch {}
+    if (res.status === 409) return { ok:false, conflict:true, closedBy: data.closedBy || data.ClosedBy || 'ผู้ใช้อื่น' };
+    if (!res.ok) { console.error('[closeVacancy] server response:', res.status, raw.slice(0,300));
+      return { ok:false, error:`HTTP ${res.status} — ${raw.slice(0,150) || 'ไม่มีรายละเอียด'}` }; }
+    return { ok:true, status: data.Status, closeDate: data.CloseDate };
+  }
+  // fallback: ไม่มี flow C2 → ใช้ POST_VACANCY_URL ตั้ง Status เอง (F3: field 'CloseDate' ตรง schema)
+  if (CONFIG.POST_VACANCY_URL) {
+    const payload = { id: parseInt(spId, 10), Status: 'Close', CloseDate: new Date().toISOString().split('T')[0] };
+    if (note) payload.CloseNote = note;
+    const res = await fetch(CONFIG.POST_VACANCY_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const raw = await res.text();
+    if (!res.ok) { console.error('[closeVacancy] server response:', res.status, raw.slice(0,300));
+      return { ok:false, error:`HTTP ${res.status} — ${raw.slice(0,150) || 'ไม่มีรายละเอียด'}` }; }
+    return { ok:true };
+  }
+  return { ok:true, local:true };   // ไม่มี flow เลย → ให้ caller อัปเดต state ใน memory
+}
+
+// ยืนยันปิดตำแหน่ง — ผ่าน postCloseVacancy() (รองรับ 409 race condition: ถ้าถูกปิดไปแล้วจะแจ้งชื่อผู้ปิด ไม่ error)
 async function confirmCloseVacancy() {
   const spId = document.getElementById('v-id').value;
   if (!spId) { alert('ต้องบันทึกตำแหน่งงานก่อน จึงจะปิดได้'); return; }
   const note = (document.getElementById('v-close-note').value || '').trim();
-
-  const today = new Date().toISOString().split('T')[0];
-  // ClosedBy ปล่อยให้ flow ประทับจากผู้ใช้ของ SharePoint connection (หน้าเว็บยังไม่มีระบบ login)
-  // F3: ใช้ field 'CloseDate' ตรงกับ schema จริงใน JobVacancy (ไม่ใช่ 'ClosedDate')
-  const payload = { id: parseInt(spId, 10), Status: 'Close', CloseDate: today };
-  if (note) payload.CloseNote = note;  // ส่งหมายเหตุการปิดถ้ามี (flow/SharePoint จะ map เมื่อมี column รองรับ)
-  const url = CONFIG.CLOSE_VACANCY_URL || CONFIG.POST_VACANCY_URL;
   const btn = document.getElementById('v-close-confirm');
   btn.disabled = true; btn.textContent = '⏳ กำลังปิด...';
   try {
-    if (url) {
-      const res = await fetch(url, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-      const raw = await res.text();
-      if (!res.ok) {
-        console.error('[closeVacancy] server response:', res.status, raw.slice(0,300));
-        throw new Error(`HTTP ${res.status} — ${raw.slice(0,150) || 'ไม่มีรายละเอียด'}`);
-      }
+    const r = await postCloseVacancy(spId, note);
+    if (r.conflict) {                 // AC-3: ถูกปิดไปแล้วโดยคนอื่น (race) → refresh ให้เห็นสถานะล่าสุด ไม่ throw
       await loadVacancies();
+      closeModal('vacancy-modal');
+      alert(`ตำแหน่งนี้ถูกปิดไปแล้วโดย ${r.closedBy}`);
+      return;
+    }
+    if (!r.ok) throw new Error(r.error || 'unknown');
+    if (r.local) {                    // ไม่มี flow → อัปเดต state ใน memory
+      const today = new Date().toISOString().split('T')[0];
+      const idx = vacancies.findIndex(v => (v.id||v.ID) == spId);
+      if (idx >= 0) vacancies[idx] = { ...vacancies[idx], Status:'Close', CloseDate:today, CloseNote:note };
+      renderVacancies(); updateKPI();
     } else {
-      const idx = vacancies.findIndex(v=>(v.id||v.ID)==spId);
-      if (idx>=0) vacancies[idx] = {...vacancies[idx], Status:'Close', CloseDate:today, CloseNote:note};
-      renderVacancies();
-      updateKPI();
+      await loadVacancies();          // AC-2: refresh → Dashboard แสดง Status=Closed ทันที
     }
     closeModal('vacancy-modal');
     showToast('ปิดตำแหน่งงานเรียบร้อยแล้ว');
@@ -1893,23 +1914,23 @@ async function toolCloseVacancies({ vacancy_ids }, containerId) {
   if (!ids.length) return JSON.stringify({ success: false, closed_count: 0, message: 'ไม่มี vacancy_ids' });
   appendMsg('bot', `⏳ กำลังปิด ${ids.length} vacancy...`, containerId);
   const today = new Date().toISOString().split('T')[0];
-  // ClosedBy ปล่อยให้ flow ประทับจากผู้ใช้ของ SharePoint connection (เว็บยังไม่มี login)
-  const url = CONFIG.CLOSE_VACANCY_URL || CONFIG.POST_VACANCY_URL;
+  const hasFlow = CONFIG.CLOSE_VACANCY_URL || CONFIG.POST_VACANCY_URL;
   let ok = 0; const errors = [];
   for (const id of ids) {
     try {
-      if (url) {
-        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: parseInt(id, 10), Status: 'Close', CloseDate: today }) });  // F3: CloseDate ตรง schema
-        if (!res.ok) { errors.push(`${id}: HTTP ${res.status}`); continue; }
-      } else {
-        const idx = vacancies.findIndex(v => (v.id || v.ID) == id);
-        if (idx >= 0) vacancies[idx] = { ...vacancies[idx], Status: 'Close', CloseDate: today };
+      const r = await postCloseVacancy(id, '');   // ใช้ helper เดียวกับ UI (รองรับ 409)
+      if (r.conflict)      errors.push(`${id}: ปิดไปแล้วโดย ${r.closedBy}`);   // race: นับเป็น skip ไม่ใช่ error ร้ายแรง
+      else if (!r.ok)      errors.push(`${id}: ${r.error || 'error'}`);
+      else {
+        if (r.local) {     // ไม่มี flow → อัปเดต state ใน memory
+          const idx = vacancies.findIndex(v => (v.id || v.ID) == id);
+          if (idx >= 0) vacancies[idx] = { ...vacancies[idx], Status: 'Close', CloseDate: today };
+        }
+        ok++;
       }
-      ok++;
     } catch (e) { errors.push(`${id}: ${e.message}`); }
   }
-  if (url) await loadVacancies(); else { renderVacancies(); updateKPI(); }
+  if (hasFlow) await loadVacancies(); else { renderVacancies(); updateKPI(); }
   return JSON.stringify({
     success: ok > 0, closed_count: ok, errors,
     message: `ปิด vacancy เรียบร้อย ${ok} รายการ${errors.length ? ` (ล้มเหลว ${errors.length} รายการ)` : ''}`

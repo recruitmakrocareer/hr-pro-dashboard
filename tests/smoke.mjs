@@ -51,7 +51,7 @@ const requiredFns = [
   'handleCVUpload', 'extractCVWithAI', 'sendChatCore', 'buildSystemPrompt',
   'renderVacancies', 'renderCandidates', 'updateKPI', 'showPage',
   'handleUrlAction', 'matchVacancyId', 'openCandidateModal',
-  'editVacancy', 'selectWithValue', 'confirmCloseVacancy', 'hideClosePanel',
+  'editVacancy', 'selectWithValue', 'confirmCloseVacancy', 'hideClosePanel', 'postCloseVacancy',
   'getVRegion', 'getVAreaHR', 'populateVacancyFilters', 'loadBranchMaster', 'branchOf', 'stampDailyKPI',
   'loadSnapshots', 'renderTrend', 'selectTrend',
   // Web Agent tools (client-side)
@@ -92,6 +92,12 @@ const sum = Object.values(grouped).reduce((a, b) => a + b, 0);
 check('group by Region รักษายอดรวมครบ 180 ไม่ตกหล่น', sum === 180 && sample.length === 180, `sum=${sum}`);
 check('จำนวนกลุ่ม Region ถูกต้อง', Object.keys(grouped).length === regions.length,
   `ได้ ${Object.keys(grouped).length} กลุ่ม`);
+
+console.log('8) C2 — closeVacancy รองรับ 409 race condition (AC-3) + contract ใหม่');
+check('postCloseVacancy เช็ค status 409', /status\s*===\s*409|res\.status\s*===\s*409/.test(html));
+check('postCloseVacancy ส่ง contract { id, CloseNote, ClosedBy }',
+  /CloseNote:[^,]*,\s*ClosedBy:/.test(html));
+check('confirmCloseVacancy จัดการ conflict (ไม่ throw error)', /r\.conflict/.test(html));
 
 console.log('');
 if (failures) { console.error(`SMOKE TEST FAILED — ${failures} ข้อ ❌`); process.exit(1); }
