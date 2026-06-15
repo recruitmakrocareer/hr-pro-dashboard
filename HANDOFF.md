@@ -145,6 +145,11 @@
 - **E3** guard เตือน console เมื่อจำนวนข้อมูลเป็นเลขกลม (100/500/1000/5000) = อาจถูก truncate
 - ⚠️ Close Vacancy: IT ยังต้องเพิ่ม column `CloseNote` + flow `HR_CLOSE_Vacancy` (ฝั่งเว็บพร้อมแล้ว)
 
+## 🆕 ทำเพิ่ม (session นี้ — D1/D2 ต่อยอด Generative UI)
+- **D1** tool `summarize_vacancies({group_by,status?,top?,count_mode?})` — สรุป group by region/branch/position/area/status/od (slots/vacancies) เช่น "Top 5 สาขาขาดคน"
+- **D2** tool `open_form({form,position?,branch?})` — เปิด modal candidate/vacancy จากแชท + pre-fill (เรียก openCandidateModal/openVacancyModal)
+- agent tools รวมตอนนี้: resolve_branch, get_open_vacancies, close_vacancies, add_vacancy(ies), filter_vacancies, summarize_vacancies, open_form
+
 ## 🐛 Fix: ตำแหน่ง/สาขา ขึ้น "[object Object]"
 - SharePoint คืน `Position`/`Branch` (และอาจ `Status`/candidate fields) เป็น **object** (lookup/choice/MMD เช่น `{Value}`/`{Label}`/`{LookupValue}`) → render ตรง ๆ เป็น `[object Object]`
 - เพิ่ม helper `fieldText(val)` ดึง string จาก object ทน ๆ + `getVBranch(v)` และให้ `getVStatus/getVTitle` ใช้ `fieldText`
