@@ -194,7 +194,9 @@ tbody tr:hover{background:#F8F7FF}
 .badge-close{background:var(--danger-light);color:#791F1F}.badge-close::before{background:#A32D2D}
 .badge-hold{background:var(--warn-light);color:#633806}.badge-hold::before{background:#854F0B}
 /* G6 — badge จำนวนผู้สมัครต่อ vacancy (ในคอลัมน์ตำแหน่งงาน) */
-.cand-badge{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600;background:var(--accent-light);color:#085041;vertical-align:middle;white-space:nowrap}
+.cand-badge{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600;background:var(--accent-light);color:#085041;vertical-align:middle;white-space:nowrap;cursor:pointer}
+.cand-badge:hover{filter:brightness:.95;box-shadow:0 0 0 2px var(--accent-light)}
+.cand-filter-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;margin-bottom:4px;background:var(--accent-light);color:#085041;border-radius:8px;font-size:13px}
 /* G4 — dropdown สถานะผู้สมัคร (บันทึกกลับ SharePoint) สีตามสถานะ */
 .cstat{font-size:12px;font-weight:600;border-radius:20px;padding:3px 10px;border:none;cursor:pointer;-webkit-appearance:none;appearance:none}
 .cstat:disabled{opacity:.6;cursor:wait}
@@ -1183,7 +1185,7 @@ function renderVacancies(data) {
     // G6 — นับผู้สมัครที่ผูกกับ vacancy นี้ + สรุปสถานะใน tooltip ของ badge
     const cands = candidatesForVacancy(v);
     const candBadge = cands.length
-      ? `<span class="cand-badge" title="${candBreakdown(cands)}">👤 ${cands.length}</span>` : '';
+      ? `<span class="cand-badge" onclick="event.stopPropagation(); showVacancyCandidates(${v.id||v.ID})" title="${candBreakdown(cands)} — คลิกดูรายชื่อ">👤 ${cands.length}</span>` : '';
     const vid = v.id||v.ID;
     return `<tr onclick="editVacancy(${vid})">
       <td class="col-title">${getVTitle(v)}${candBadge}</td>
@@ -1318,14 +1320,41 @@ function cvLinkOf(c) {
   return raw || '';
 }
 
+// G6 — กด badge ผู้สมัครบนตาราง vacancy → มาดูเฉพาะผู้สมัครของตำแหน่งนั้น
+let candidateVacancyFilter = null;
+function showVacancyCandidates(vacancyId) {
+  showPage('candidate');             // เปลี่ยนหน้า (showPage จะล้างตัวกรองเดิมให้)
+  candidateVacancyFilter = vacancyId;
+  renderCandidates();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function clearCandidateFilter() {
+  candidateVacancyFilter = null;
+  renderCandidates();
+}
+
 function renderCandidates() {
   const grid = document.getElementById('candidate-grid');
   if (!candidates.length) {
     grid.innerHTML = `<div style="grid-column:1/-1"><div class="empty"><div class="empty-icon">📭</div><div class="empty-text">ยังไม่มีผู้สมัคร</div></div></div>`;
     return;
   }
+  // ถ้ามาจากการกด badge ของตำแหน่ง → กรองเฉพาะผู้สมัครของตำแหน่งนั้น + แสดงแถบบอก/ปุ่มล้าง
+  let list = candidates, banner = '';
+  if (candidateVacancyFilter != null) {
+    const vac = vacancies.find(v => (v.id||v.ID) == candidateVacancyFilter);
+    list = vac ? candidatesForVacancy(vac) : [];
+    banner = `<div class="cand-filter-banner" style="grid-column:1/-1">
+      <span>👤 ผู้สมัครของตำแหน่ง <b>${vac ? getVTitle(vac) : '-'}</b> (${list.length} คน)</span>
+      <button class="btn btn-sm" onclick="clearCandidateFilter()">✕ ดูผู้สมัครทั้งหมด</button>
+    </div>`;
+    if (!list.length) {
+      grid.innerHTML = banner + `<div style="grid-column:1/-1"><div class="empty"><div class="empty-icon">📭</div><div class="empty-text">ยังไม่มีผู้สมัครสำหรับตำแหน่งนี้</div></div></div>`;
+      return;
+    }
+  }
   const statusColor = {Screening:'badge-hold',Interview:'badge-open',Offer:'badge-open',Hired:'badge-open',Rejected:'badge-close',New:'badge-hold',Pass:'badge-open',Fail:'badge-close'};
-  grid.innerHTML = candidates.map(c => {
+  grid.innerHTML = banner + list.map(c => {
     // SharePoint อาจคืนชื่อ/ตำแหน่งเป็น object → ใช้ fieldText ให้ทน (กัน "[object Object]")
     const cName = fieldText(c.Title) || '-';
     const cPos = fieldText(c.VacancyTitle) || 'ไม่ระบุตำแหน่ง';
@@ -2391,6 +2420,8 @@ function showPage(name,btn,nav){
     document.querySelectorAll('.nav-link').forEach(l=>l.classList.remove('active'));
   }
   if(btn)btn.classList.add('active');
+  // เข้าหน้าผู้สมัครแบบปกติ (กด nav) → ล้างตัวกรองตามตำแหน่งที่ค้างไว้ ให้เห็นผู้สมัครทั้งหมด
+  if(name==='candidate' && candidateVacancyFilter!=null){ candidateVacancyFilter=null; renderCandidates(); }
 }
 
 // ใช้ logic เดียวกับ desktop (รวม system prompt + tools) แชร์ chatHistory เดียวกัน
