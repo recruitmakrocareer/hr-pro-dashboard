@@ -1225,7 +1225,7 @@ function candidatesForVacancy(v) {
 }
 function candBreakdown(cands) {
   const m = {};
-  cands.forEach(c => { const s = fieldText(c.CandidateStatus) || 'Screening'; m[s] = (m[s]||0)+1; });
+  cands.forEach(c => { const s = fieldText(c.CandidateStatus) || fieldText(c.Status) || 'Screening'; m[s] = (m[s]||0)+1; });
   return Object.entries(m).map(([k,n]) => `${n} ${k}`).join(', ');
 }
 
@@ -1439,7 +1439,7 @@ function renderCandidates() {
     // SharePoint อาจคืนชื่อ/ตำแหน่งเป็น object → ใช้ fieldText ให้ทน (กัน "[object Object]")
     const cName = fieldText(c.Title) || '-';
     const cPos = fieldText(c.VacancyTitle) || 'ไม่ระบุตำแหน่ง';
-    const cStatus = fieldText(c.CandidateStatus) || 'Screening';
+    const cStatus = fieldText(c.CandidateStatus) || fieldText(c.Status) || 'Screening';
     const initials = (cName !== '-' ? cName : '?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
     const cv = cvLinkOf(c);
     // G4 — dropdown แก้สถานะ → บันทึกกลับ SharePoint ทันที (สีตามสถานะ; ค่าเก่านอก 5 ตัวจะถูกใส่เป็น option ชั่วคราว)
@@ -1881,7 +1881,7 @@ function buildSystemPrompt() {
   ).join('\n');
 
   const candidateList = candidates.map(c =>
-    `- ${fieldText(c.Title)||fieldText(c.FullName)||'-'} | ตำแหน่ง: ${fieldText(c.VacancyTitle)||'-'} | สถานะ: ${fieldText(c.CandidateStatus)||'-'}`
+    `- ${fieldText(c.Title)||fieldText(c.FullName)||'-'} | ตำแหน่ง: ${fieldText(c.VacancyTitle)||'-'} | สถานะ: ${fieldText(c.CandidateStatus)||fieldText(c.Status)||'-'}`
   ).join('\n');
 
   const positionList = POSITIONS.join('\n- ');
