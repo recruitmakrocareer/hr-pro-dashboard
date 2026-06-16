@@ -24,6 +24,7 @@ jobs:
           GET_CANDIDATES_URL: ${{ secrets.GET_CANDIDATES_URL }}
           POST_CANDIDATE_URL: ${{ secrets.POST_CANDIDATE_URL }}
           CLOSE_VACANCY_URL: ${{ secrets.CLOSE_VACANCY_URL }}
+          UPDATE_CANDIDATESTATUS_URL: ${{ secrets.UPDATE_CANDIDATESTATUS_URL }}
           GET_BRANCHMASTER_URL: ${{ secrets.GET_BRANCHMASTER_URL }}
           POST_SNAPSHOT_URL: ${{ secrets.POST_SNAPSHOT_URL }}
           GET_SNAPSHOTS_URL: ${{ secrets.GET_SNAPSHOTS_URL }}
@@ -33,7 +34,7 @@ jobs:
         run: |
           node -e '
             const fs = require("fs");
-            const keys = ["CLAUDE_API_KEY","GET_VACANCIES_URL","POST_VACANCY_URL","GET_CANDIDATES_URL","POST_CANDIDATE_URL","CLOSE_VACANCY_URL","GET_BRANCHMASTER_URL","POST_SNAPSHOT_URL","GET_SNAPSHOTS_URL"];
+            const keys = ["CLAUDE_API_KEY","GET_VACANCIES_URL","POST_VACANCY_URL","GET_CANDIDATES_URL","POST_CANDIDATE_URL","CLOSE_VACANCY_URL","UPDATE_CANDIDATESTATUS_URL","GET_BRANCHMASTER_URL","POST_SNAPSHOT_URL","GET_SNAPSHOTS_URL"];
             const required = ["GET_VACANCIES_URL","POST_VACANCY_URL","GET_CANDIDATES_URL","POST_CANDIDATE_URL"];
             for (const k of keys) console.log((process.env[k] ? "OK   set    " : "XX   MISSING") + " " + k);
             const missing = required.filter(k => !process.env[k]);
