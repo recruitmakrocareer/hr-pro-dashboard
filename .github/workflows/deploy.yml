@@ -1,7 +1,7 @@
 name: Deploy to GitHub Pages
 
 # Deploy publishes index.html (with injected secrets) to GitHub Pages on every push to main.
-# redeploy: pick up GET_BRANCHMASTER_URL secret (Area HR)
+# redeploy: pick up UPDATE_CANDIDATESTATUS_URL secret (G4 — บันทึกสถานะผู้สมัคร)
 on:
   push:
     branches: [main]
