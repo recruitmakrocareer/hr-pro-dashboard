@@ -721,6 +721,9 @@ const CONFIG = {
   // Flow: HR_DELETE_Candidate — ลบผู้สมัครออกจาก List `Candidates` ({id} → 200 {success} / 400)
   // optional — ถ้ายังไม่ตั้ง secret ปุ่มลบจะลบเฉพาะใน memory (ไม่ persist ลง SharePoint)
   DELETE_CANDIDATE_URL: '__DELETE_CANDIDATE_URL__',
+  // Flow: HR_DELETE_Vacancy — ลบตำแหน่งงานออกจาก List `JobVacancy` ({id} → 200/202)
+  // optional — ถ้ายังไม่ตั้ง secret ปุ่มลบจะลบเฉพาะใน memory (ไม่ persist ลง SharePoint)
+  DELETE_VACANCY_URL: '__DELETE_VACANCY_URL__',
   // Flow: GET BranchMaster — คืนรายการสาขา (LocationCode/NameTH/NameEN/Region/AreaHR/...) สำหรับ lookup Area HR
   // optional — ถ้ายังไม่ตั้ง secret คอลัมน์ Area HR จะแสดง '-'
   GET_BRANCHMASTER_URL: '__GET_BRANCHMASTER_URL__',
@@ -747,6 +750,7 @@ console.log('[CONFIG] URLs present?', {
   POST_CANDIDATE_URL: !!CONFIG.POST_CANDIDATE_URL,
   CLOSE_VACANCY_URL: !!CONFIG.CLOSE_VACANCY_URL,
   UPDATE_CANDIDATESTATUS_URL: !!CONFIG.UPDATE_CANDIDATESTATUS_URL,
+  DELETE_VACANCY_URL: !!CONFIG.DELETE_VACANCY_URL,
   GET_BRANCHMASTER_URL: !!CONFIG.GET_BRANCHMASTER_URL,
   POST_SNAPSHOT_URL: !!CONFIG.POST_SNAPSHOT_URL,
   GET_SNAPSHOTS_URL: !!CONFIG.GET_SNAPSHOTS_URL,
@@ -1160,6 +1164,23 @@ function isEmptyVacancy(v) {
   return !(fieldText(v.Position) || fieldText(v.Title)) && !getVBranch(v);
 }
 
+// หลัง loadVacancies(): ถ้า vacancy ใหม่ที่เพิ่งสร้างผ่าน AI chat มี Branch เป็น null (lookup ใน SharePoint ไม่ resolve)
+// → patch Branch/Region/AreaHR จาก branchInfo ที่โหลดไว้ เพื่อให้ตารางแสดงข้อมูลถูกต้อง
+function patchVacancyBranchInfo(position, branchName) {
+  if (!branchName) return;
+  const info = branchInfo[normBranch(branchName)] || {};
+  // หา vacancy ที่ตำแหน่งตรงและยังไม่มีสาขา (เรียงใหม่ก่อนเพื่อ match รายการล่าสุด)
+  const match = [...vacancies]
+    .sort((a, b) => (b.ID||b.id||0) - (a.ID||a.id||0))
+    .find(v => getVTitle(v) === position && !getVBranch(v));
+  if (!match) return;
+  match.Branch = branchName;
+  if (!fieldText(match.Region) && info.region)  match.Region  = info.region;
+  if (!fieldText(match.AreaHR) && info.areaHR)  match.AreaHR  = info.areaHR;
+  renderVacancies();
+  populateVacancyFilters();
+}
+
 function updateKPI() {
   document.getElementById('kpi-total').textContent = vacancies.length;
   const open  = vacancies.filter(v=>getVStatus(v)==='Open').length;
@@ -1203,6 +1224,7 @@ function renderVacancies(data) {
       <td onclick="event.stopPropagation()">
         ${status==='Open'?`<button class="btn btn-sm btn-icon" onclick="addCandidateForVacancy(${vid})" title="เพิ่มผู้สมัครตำแหน่งนี้">👤+</button>`:''}
         <button class="btn btn-sm btn-icon" onclick="editVacancy(${vid})" title="แก้ไข">✏️</button>
+        <button class="btn btn-sm btn-icon" onclick="deleteVacancy(${vid}, this)" title="ลบตำแหน่งงาน" style="color:#e53e3e">🗑️</button>
       </td>
     </tr>`;
   }).join('');
@@ -1388,6 +1410,35 @@ async function handleDeleteCandidate(candidateId, btnEl) {
     showToast(`ลบ ${cName} แล้ว`);
   } catch (e) {
     console.error('handleDeleteCandidate error:', e);
+    alert('ลบไม่สำเร็จ: ' + (e.message || 'unknown'));
+    if (btnEl) btnEl.disabled = false;
+  }
+}
+
+// ===================== VACANCY DELETE =====================
+async function deleteVacancy(vacId, btnEl) {
+  const v = vacancies.find(x => String(x.ID || x.id) === String(vacId));
+  const vName = v ? `${getVTitle(v)} (${getVBranch(v)||'-'})` : 'ตำแหน่งนี้';
+  if (!confirm(`ต้องการลบ "${vName}" ออกจากรายการตำแหน่งงานใช่หรือไม่?\n(การลบนี้ย้อนกลับไม่ได้)`)) return;
+  if (btnEl) btnEl.disabled = true;
+  try {
+    if (CONFIG.DELETE_VACANCY_URL) {
+      const res = await fetch(CONFIG.DELETE_VACANCY_URL, {
+        method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: JSON.stringify({ id: String(vacId) })
+      });
+      if (!res.ok && res.status !== 202) {
+        const raw = await res.text().catch(() => '');
+        console.error('[deleteVacancy] server response:', res.status, raw.slice(0, 300));
+        throw new Error(`HTTP ${res.status}`);
+      }
+    }
+    vacancies = vacancies.filter(x => String(x.ID || x.id) !== String(vacId));
+    renderVacancies();
+    updateKPI();
+    showToast(`ลบ "${vName}" แล้ว`);
+  } catch (e) {
+    console.error('deleteVacancy error:', e);
     alert('ลบไม่สำเร็จ: ' + (e.message || 'unknown'));
     if (btnEl) btnEl.disabled = false;
   }
@@ -2152,6 +2203,7 @@ async function toolAddVacancy(inp, containerId) {
   try {
     await postVacancy(inp);
     await loadVacancies();
+    patchVacancyBranchInfo(inp.Position, inp.Branch);
     return JSON.stringify({ success: true, message: `เพิ่มตำแหน่ง ${inp.Position} สาขา ${inp.Branch} เรียบร้อย` });
   } catch (e) { return JSON.stringify({ success: false, message: e.message }); }
 }
@@ -2164,6 +2216,7 @@ async function toolAddVacancies(inp, containerId) {
     try { await postVacancy(item); ok++; } catch (e) { errors.push(`${item.Position}: ${e.message}`); }
   }
   await loadVacancies();
+  for (const item of items) patchVacancyBranchInfo(item.Position, item.Branch);
   return JSON.stringify({ success: ok > 0, added_count: ok, errors,
     message: `เพิ่มเรียบร้อย ${ok}/${items.length} ตำแหน่ง${errors.length ? ` (ล้มเหลว ${errors.length})` : ''}` });
 }
