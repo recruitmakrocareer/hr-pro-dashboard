@@ -26,7 +26,7 @@ jobs:
           CLOSE_VACANCY_URL: ${{ secrets.CLOSE_VACANCY_URL }}
           UPDATE_CANDIDATESTATUS_URL: ${{ secrets.UPDATE_CANDIDATESTATUS_URL }}
           DELETE_CANDIDATE_URL: ${{ secrets.DELETE_CANDIDATE_URL }}
-          DELETE_VACANCY_URL: ${{ secrets.DELETE_VACANCY_URL }}
+          DELETE_VACANCY_URL: ${{ secrets.HR_DELETE_VACANCY }}   # secret ตั้งชื่อ HR_DELETE_VACANCY แต่ placeholder/env ใช้ DELETE_VACANCY_URL
           GET_BRANCHMASTER_URL: ${{ secrets.GET_BRANCHMASTER_URL }}
           POST_SNAPSHOT_URL: ${{ secrets.POST_SNAPSHOT_URL }}
           GET_SNAPSHOTS_URL: ${{ secrets.GET_SNAPSHOTS_URL }}
