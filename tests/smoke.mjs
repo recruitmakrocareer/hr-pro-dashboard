@@ -130,6 +130,12 @@ check('  guard NaN ของ vacNum ก่อนส่ง', /Number\.isNaN\(vacN
 check('payload ไม่มี ": null" หลุด (FileName/FileContent)', !/:\s*null\b/.test(
   (saveBlock.match(/const payload = \{[\s\S]*?\};/) || [''])[0]));
 
+console.log('12) UX — กด badge ผู้สมัครบนตาราง vacancy → ดูผู้สมัครของตำแหน่งนั้น (ไม่เปิดแก้ไข)');
+check('function showVacancyCandidates()', /function\s+showVacancyCandidates\s*\(/.test(html));
+check('function clearCandidateFilter()', /function\s+clearCandidateFilter\s*\(/.test(html));
+check('badge มี stopPropagation + เรียก showVacancyCandidates', /event\.stopPropagation\(\);\s*showVacancyCandidates\(/.test(html));
+check('renderCandidates เคารพ candidateVacancyFilter', /candidateVacancyFilter\s*!=\s*null/.test(html));
+
 console.log('');
 if (failures) { console.error(`SMOKE TEST FAILED — ${failures} ข้อ ❌`); process.exit(1); }
 console.log('SMOKE TEST PASSED ✅');
