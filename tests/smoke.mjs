@@ -109,6 +109,15 @@ check('handleStatusChange มี logic auto-close เมื่อ Hired (AC-2)',
 check('deploy.yml inject UPDATE_CANDIDATESTATUS_URL',
   /UPDATE_CANDIDATESTATUS_URL/.test(readFileSync(join(root, '.github/workflows/deploy.yml'), 'utf8')));
 
+console.log('10) F4 — รายชื่อสาขาสดจาก BranchMaster (live) + fallback static');
+check('มีตัวแปร branchList (live list)', /\blet\s+branchList\s*=/.test(html));
+check('loadBranchMaster อัปเดต branchList + refresh dropdown',
+  /branchList\s*=\s*liveNames[\s\S]{0,40}populateDropdowns\(\)/.test(html));
+check('fallback static เมื่อ flow คืนสาขาไม่ครบ (< 50)', /liveNames\.length\s*>=\s*50/.test(html));
+check('dropdown สาขา render จาก branchList', /branchList\.map\(b\s*=>/.test(html));
+check('agent (toolResolveBranch) ใช้ branchList', /branchList\.find\(b\s*=>\s*normBranch/.test(html));
+check('static BRANCHES คงไว้เป็น fallback (172)', /const\s+BRANCHES\s*=\s*\[/.test(html));
+
 console.log('');
 if (failures) { console.error(`SMOKE TEST FAILED — ${failures} ข้อ ❌`); process.exit(1); }
 console.log('SMOKE TEST PASSED ✅');
