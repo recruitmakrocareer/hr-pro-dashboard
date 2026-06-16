@@ -1,7 +1,7 @@
 name: Deploy to GitHub Pages
 
 # Deploy publishes index.html (with injected secrets) to GitHub Pages on every push to main.
-# redeploy: pick up DELETE_CANDIDATE_URL secret (ลบผู้สมัคร — persist ลง SharePoint)
+# redeploy: pick up DELETE_VACANCY_URL secret (ลบตำแหน่งงาน — persist ลง SharePoint)
 on:
   push:
     branches: [main]
