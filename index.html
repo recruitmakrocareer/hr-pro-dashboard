@@ -1134,6 +1134,9 @@ function getVStatus(v) {
 }
 function getVTitle(v)  { return fieldText(v.Position) || fieldText(v.Title) || '-'; }
 function getVBranch(v) { return fieldText(v.Branch); }
+// รหัสธุรกิจของ vacancy รูปแบบ "VAC-YYYYMMDDHHMI-{ID}" — ใช้เป็น VacancyID ที่ส่งให้ flow
+// (G3 HR_AutoClose_OnHire filter vacancy ด้วยรหัสนี้ ไม่ใช่เลข SharePoint id) — ทน object {Value}/plain string
+function getVacancyCode(v) { return fieldText(v && (v.VacancyID ?? v.VacancyCode)); }
 function getVRegion(v) {
   return fieldText(v.Region) || fieldText(v.region) || (branchOf(v).region || '');
 }
@@ -1208,11 +1211,12 @@ function candVacancyId(c) {
   return (x && typeof x === 'object') ? (x.Value ?? x.value ?? '') : (x ?? '');
 }
 function candidatesForVacancy(v) {
-  const vid = String(v.id || v.ID);
+  const vcode = getVacancyCode(v);                 // "VAC-..." (candidate ใหม่ผูกด้วยรหัสนี้)
+  const vid = String(v.id || v.ID);                // เลข SharePoint id (legacy)
   const vtitle = getVTitle(v);
   return candidates.filter(c => {
     const cvid = String(candVacancyId(c)).trim();
-    if (cvid) return cvid === vid;
+    if (cvid) return cvid === vcode || cvid === vid;
     return fieldText(c.VacancyTitle) === vtitle;   // ไม่มี VacancyID → เทียบชื่อตำแหน่ง
   });
 }
@@ -1730,16 +1734,16 @@ async function saveCandidate() {
   if (!first || !last || !vacancyId) { alert('กรุณากรอกชื่อ นามสกุล และตำแหน่งที่สมัคร'); return; }
 
   const vac = vacancies.find(v=>(v.id||v.ID)==vacancyId);
-  const vacNum = parseInt(vacancyId, 10);
-  // VacancyID ต้องเป็น Integer ตาม schema ของ flow (ไม่ใช่ String) — กัน NaN → ยกเลิกการส่ง
-  if (Number.isNaN(vacNum)) { alert('ตำแหน่งที่สมัครไม่ถูกต้อง กรุณาเลือกใหม่'); return; }
-  // field ที่เป็น String ครอบด้วย safeStr() กัน null (Expected String but got Null);
-  // VacancyID ส่งเป็น number ตรง ๆ (schema = Integer — ถ้าส่ง string จะได้ Expected Integer but got String)
+  // VacancyID ต้องเป็นรหัสธุรกิจ "VAC-YYYYMMDDHHMI-{ID}" (string) — G3 HR_AutoClose_OnHire filter vacancy ด้วยรหัสนี้
+  // (flow HR_POST_NewCandidate schema = String แล้ว) ไม่ใช่เลข SharePoint id — ส่งเลขไป G3 หา vacancy ไม่เจอ
+  const vacCode = vac ? getVacancyCode(vac) : '';
+  if (!vacCode) { alert('ไม่พบรหัส VacancyID ของตำแหน่งนี้ กรุณารีเฟรชรายการแล้วเลือกใหม่'); return; }
+  // field ที่เป็น String ครอบด้วย safeStr() กัน null (Expected String but got Null)
   const payload = {
     Title: safeStr(`${first} ${last}`),
     Email: safeStr(fieldVal('c-email')),
     Phone: safeStr(fieldVal('c-phone')),
-    VacancyID: vacNum,
+    VacancyID: safeStr(vacCode),
     VacancyTitle: safeStr(vac ? getVTitle(vac) : ''),
     CandidateStatus: safeStr(fieldVal('c-status')) || 'Screening',
     FileName: safeStr(cvFileBase64 ? cvFileName : ''),

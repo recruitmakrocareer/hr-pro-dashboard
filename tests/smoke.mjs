@@ -129,9 +129,11 @@ const saveBlock = (html.match(/async function saveCandidate\(\)[\s\S]*?\n}/) || 
 // String fields ต้องครอบ safeStr() กัน null (Expected String but got Null)
 ['Title', 'Email', 'Phone', 'VacancyTitle', 'CandidateStatus', 'FileName', 'FileContent']
   .forEach(f => check(`  payload.${f} ครอบด้วย safeStr`, new RegExp(`${f}:\\s*safeStr\\(`).test(saveBlock)));
-// VacancyID ต้องเป็น Integer (vacNum) ไม่ใช่ safeStr/string (Expected Integer but got String)
-check('  payload.VacancyID เป็น integer (vacNum) ไม่ใช่ safeStr', /VacancyID:\s*vacNum\b/.test(saveBlock));
-check('  guard NaN ของ vacNum ก่อนส่ง', /Number\.isNaN\(vacNum\)/.test(saveBlock));
+// VacancyID ต้องเป็นรหัสธุรกิจ "VAC-..." (string) — G3 HR_AutoClose_OnHire filter vacancy ด้วยรหัสนี้
+// (flow schema = String แล้ว) ไม่ใช่เลข SharePoint id — มี getter getVacancyCode + guard ก่อนส่ง
+check('  มี getter getVacancyCode (อ่าน VAC-code ทน object/string)', /function\s+getVacancyCode\s*\(/.test(html));
+check('  payload.VacancyID ส่ง VAC-code (vacCode) ไม่ใช่เลข id', /VacancyID:\s*safeStr\(vacCode\)/.test(saveBlock));
+check('  guard เมื่อไม่พบ vacCode ก่อนส่ง', /if\s*\(\s*!vacCode\s*\)/.test(saveBlock));
 check('payload ไม่มี ": null" หลุด (FileName/FileContent)', !/:\s*null\b/.test(
   (saveBlock.match(/const payload = \{[\s\S]*?\};/) || [''])[0]));
 
