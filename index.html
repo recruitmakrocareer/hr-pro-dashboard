@@ -85,7 +85,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14
 .page{display:none}
 .page.active{display:block}
 .container{padding:20px 24px}
-.two-col{display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start}
+.two-col{display:grid;grid-template-columns:1fr;gap:20px;align-items:start} /* เดิม: 1fr 340px — คืนค่านี้ถ้าเปิดแชทกลับมาใช้ */
 
 /* ===================== KPI CARDS ===================== */
 .kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:20px}
@@ -412,7 +412,7 @@ tbody tr:hover{background:#F8F7FF}
     <button class="nav-link" onclick="showPage('candidate',this)">ผู้สมัคร</button>
   </div>
   <div class="nav-right">
-    <div class="nav-badge">HR Pro Agent Online</div>
+    <!-- <div class="nav-badge">HR Pro Agent Online</div> -->
     <div class="avatar" title="Pituporn Chitsuk">PC</div>
   </div>
 </nav>
@@ -518,7 +518,7 @@ tbody tr:hover{background:#F8F7FF}
       </div>
     </div>
 
-    <!-- CHAT PANEL -->
+    <!-- CHAT PANEL — DISABLED 2026-06-16 (ใช้กรอกมือแทน, คงโค้ดไว้เผื่อกลับมาใช้)
     <div class="chat-panel">
       <div class="chat-header">
         <div class="chat-header-top">
@@ -549,6 +549,7 @@ tbody tr:hover{background:#F8F7FF}
         </div>
       </div>
     </div>
+    -->
   </div>
 </div>
 </div>
@@ -1924,7 +1925,10 @@ async function saveCandidate() {
   }
 }
 
-// ===================== CHAT =====================
+// ฟังก์ชันร่วม ใช้ทั้งตารางหลัก + ฟอร์มกรอกมือ — ห้ามย้ายเข้าไปอยู่ในบล็อกแชทด้านล่างอีก
+function normBranch(s) { return (s ?? '').toString().trim().toLowerCase().replace(/^สาขา\s*/, '').trim(); }
+
+/* ===================== CHAT (DISABLED 2026-06-16 — ใช้กรอกมือแทน, คงโค้ดไว้เผื่อกลับมาใช้) =====================
 const chatReplies = {
   'สรุปตำแหน่ง':'ตอนนี้มีตำแหน่งเปิดรับอยู่ {{open}} อัตรา จากทั้งหมด {{total}} ตำแหน่ง ในหลายสาขาครับ',
   'ผู้สมัครใหม่':'วันนี้มีผู้สมัครใหม่เข้ามา {{candidates}} คนครับ',
@@ -2120,9 +2124,6 @@ const AGENT_TOOLS = [
     }
   }
 ];
-
-// normalize ชื่อสาขาเพื่อ match (ตัดคำนำหน้า "สาขา", lower-case, trim)
-function normBranch(s) { return (s ?? '').toString().trim().toLowerCase().replace(/^สาขา\s*/, '').trim(); }
 
 // ---- Client-side tool implementations (คืน string JSON เป็น tool_result) ----
 function toolResolveBranch({ branch_input }) {
@@ -2501,6 +2502,7 @@ function removeTyping(id) {
 }
 
 function addMessage(text, type) { appendMsg(type, text); }
+===================== END CHAT (DISABLED) ===================== */
 
 // ===================== MODAL HELPERS =====================
 function openModal(id){document.getElementById(id).classList.add('show')}
@@ -2531,10 +2533,10 @@ function showToast(msg) {
 <nav class="bottom-nav" id="bottom-nav">
   <button class="bnav-item active" onclick="showPage('dashboard',this,'b')"><span class="bicon">📊</span>แดชบอร์ด</button>
   <button class="bnav-item" onclick="showPage('candidate',this,'b')"><span class="bicon">👤</span>ผู้สมัคร</button>
-  <button class="bnav-item" onclick="showPage('chat',this,'b')"><span class="bicon">🤖</span>AI Agent</button>
+  <!-- <button class="bnav-item" onclick="showPage('chat',this,'b')"><span class="bicon">🤖</span>AI Agent</button> -->
 </nav>
 
-<!-- PAGE: CHAT (Mobile full page) -->
+<!-- PAGE: CHAT (Mobile full page) — DISABLED 2026-06-16
 <div id="page-chat" class="page">
 <div class="container" style="padding-top:calc(var(--nav-h) + 16px)">
   <div class="chat-panel" style="height:calc(100vh - 140px)">
@@ -2560,6 +2562,7 @@ function showToast(msg) {
   </div>
 </div>
 </div>
+-->
 <script>
 // Mobile nav
 function showPage(name,btn,nav){
@@ -2576,10 +2579,12 @@ function showPage(name,btn,nav){
   if(name==='candidate' && candidateVacancyFilter!=null){ candidateVacancyFilter=null; renderCandidates(); }
 }
 
+/* sendChatMobile — DISABLED 2026-06-16 (dead code หลังปิดแผงแชท)
 // ใช้ logic เดียวกับ desktop (รวม system prompt + tools) แชร์ chatHistory เดียวกัน
 async function sendChatMobile(text){
   return sendChatCore(text, 'chat-input-mobile', 'chat-messages-mobile');
 }
+*/
 </script>
 </body>
 </html>
