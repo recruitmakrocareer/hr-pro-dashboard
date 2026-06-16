@@ -801,6 +801,10 @@ const BRANCHES = [
   "Fresh Shop ชิโนปาร์ค","Fresh Shop พัฒนาการ",
 ].map(b => b.replace(/^สาขา\s*/, ''));  // F1: ใช้รูปแบบไม่มี prefix "สาขา" ให้ตรงกับ JobVacancy.Branch ที่ seed ไว้
 
+// F4 — รายชื่อสาขาที่ใช้จริงใน dropdown/agent: เริ่มจาก static BRANCHES แล้ว loadBranchMaster()
+// จะแทนด้วยรายชื่อสดจาก flow เมื่อโหลดสำเร็จ (fallback คงเป็น static ถ้า flow ล่ม/คืนข้อมูลไม่ครบ)
+let branchList = BRANCHES;
+
 // ===================== STATE =====================
 let vacancies = [];
 let candidates = [];
@@ -835,7 +839,9 @@ function populateDropdowns() {
     const sel = document.getElementById(id);
     if (!sel) return;
     const first = sel.options[0].outerHTML;
-    sel.innerHTML = first + BRANCHES.map(b => `<option value="${b}">${b}</option>`).join('');
+    const cur = sel.value;   // คงค่าที่เลือกไว้เมื่อ refresh ด้วยรายชื่อสด (F4)
+    sel.innerHTML = first + branchList.map(b => `<option value="${b}">${b}</option>`).join('');
+    if (cur && branchList.includes(cur)) sel.value = cur;
   });
 }
 
@@ -1008,8 +1014,18 @@ async function loadBranchMaster() {
       if (code)   map['#code:' + code.toLowerCase()] = rec;
     }
     branchInfo = map;
+    // F4 — ดึงรายชื่อสาขาสดจาก master (ตัด prefix "สาขา" ให้ตรงรูปแบบ JobVacancy.Branch) มาแทน static
+    // กัน CDC/HO และกรณี flow คืนข้อมูลไม่ครบ: ถ้าได้ < 50 สาขา คงใช้ static ที่ครบกว่า
+    const liveNames = [...new Set(items
+      .map(b => fieldText(b.NameTH) || fieldText(b.NameTh) || fieldText(b.Title))
+      .filter(Boolean)
+      .map(s => s.replace(/^สาขา\s*/, '').trim())
+      .filter(s => s && !/^(995|999)$/.test(s) && !/cdc|head\s*office|สำนักงานใหญ่/i.test(s)))];
+    let liveUsed = false;
+    if (liveNames.length >= 50) { branchList = liveNames; populateDropdowns(); liveUsed = true; }
     console.log('[loadBranchMaster] โหลด', items.length, 'สาขา → map', Object.keys(map).length,
-      'คีย์ | rootType:', Array.isArray(data) ? 'array' : typeof data,
+      'คีย์ | branchList:', branchList.length, liveUsed ? '(สด)' : '(static fallback)',
+      '| rootType:', Array.isArray(data) ? 'array' : typeof data,
       '| first keys:', Object.keys(items[0] || {}), '| sample:', items[0]);
   } catch(e) { console.error('[loadBranchMaster] error:', e); }
 }
@@ -1753,8 +1769,8 @@ function buildSystemPrompt() {
   ).join('\n');
 
   const positionList = POSITIONS.join('\n- ');
-  const branchSample = BRANCHES.slice(0, 10).join(', ');
-  const branchNote = `(มีทั้งหมด ${BRANCHES.length} สาขา เช่น ${branchSample} ฯลฯ)\nใช้ชื่อสาขาตามที่ user พิมพ์มาได้เลย ไม่ต้องแปลง`;
+  const branchSample = branchList.slice(0, 10).join(', ');
+  const branchNote = `(มีทั้งหมด ${branchList.length} สาขา เช่น ${branchSample} ฯลฯ)\nใช้ชื่อสาขาตามที่ user พิมพ์มาได้เลย ไม่ต้องแปลง`;
 
   return `คุณคือ HR Pro Agent ของ Siam Makro Group ทีม Talent Acquisition
 ตอบกลับเป็นภาษาไทยเสมอ สุภาพ กระชับ และเป็นมืออาชีพ
@@ -1942,10 +1958,10 @@ function toolResolveBranch({ branch_input }) {
     return JSON.stringify({ found: false, rejected: true, message: 'ไม่รองรับสาขา CDC (995) หรือ HO (999)' });
   }
   if (!n) return JSON.stringify({ found: false, message: 'กรุณาระบุชื่อหรือรหัสสาขา' });
-  let hit = BRANCHES.find(b => normBranch(b) === n);
-  if (!hit && n.length >= 2) hit = BRANCHES.find(b => normBranch(b).includes(n));
+  let hit = branchList.find(b => normBranch(b) === n);
+  if (!hit && n.length >= 2) hit = branchList.find(b => normBranch(b).includes(n));
   if (!hit) {
-    const suggestions = BRANCHES.filter(b => normBranch(b).includes(n)).slice(0, 5);
+    const suggestions = branchList.filter(b => normBranch(b).includes(n)).slice(0, 5);
     return JSON.stringify({ found: false, message: 'ไม่พบสาขาที่ระบุ', suggestions });
   }
   // D3/F4: แนบข้อมูลจาก BranchMaster ถ้าโหลดไว้ (region/area HR/OD/location_code)
@@ -2201,13 +2217,13 @@ function toolOpenForm({ form, position, branch } = {}) {
     return list.find(x => x.toLowerCase() === n) || list.find(x => x.toLowerCase().includes(n)) || val;
   };
   if (f.includes('cand') || f.includes('applicant') || f.includes('ผู้สมัคร')) {
-    openCandidateModal({ position: canonList(POSITIONS, position), branch: canonList(BRANCHES, branch) });
+    openCandidateModal({ position: canonList(POSITIONS, position), branch: canonList(branchList, branch) });
     showPage('dashboard');
     return JSON.stringify({ opened: 'candidate', message: 'เปิดฟอร์มเพิ่มผู้สมัครให้แล้ว กรุณากรอกข้อมูล' });
   }
   openVacancyModal();
   if (position) selectWithValue('v-title', canonList(POSITIONS, position));
-  if (branch)   selectWithValue('v-branch', canonList(BRANCHES, branch));
+  if (branch)   selectWithValue('v-branch', canonList(branchList, branch));
   showPage('dashboard');
   return JSON.stringify({ opened: 'vacancy', message: 'เปิดฟอร์มเพิ่มตำแหน่งงานให้แล้ว กรุณากรอกข้อมูล' });
 }
