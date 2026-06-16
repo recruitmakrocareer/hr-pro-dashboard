@@ -1308,9 +1308,34 @@ async function handleStatusChange(candidateId, newStatus, selEl) {
     renderCandidates();
     if (vacancies.length) renderVacancies();
     showToast(`อัปเดตสถานะเป็น ${newStatus} แล้ว`);
-    // AC-2: 'Hired' → flow G3 (HR_AutoClose_OnHire) ปิด vacancy ที่ผูกกันอัตโนมัติ — reload vacancy เพื่อสะท้อนผล (ไม่ต้องเรียก closeVacancy ซ้ำ)
-    if (newStatus === 'Hired' && CONFIG.GET_VACANCIES_URL) {
-      setTimeout(() => loadVacancies(), 3000);
+    // AC-2: 'Hired' → ปิด vacancy ที่ผูกกับผู้สมัครนี้อัตโนมัติ (ไม่รอ G3 IT flow)
+    if (newStatus === 'Hired' && c) {
+      const cVacId = String(c.VacancyID || c.vacancyId || '');
+      const linkedVac = vacancies.find(v => {
+        const vId = String(v.ID || v.id || '');
+        const vCode = getVacancyCode(v);
+        return cVacId && (cVacId === vId || cVacId === vCode);
+      });
+      if (linkedVac) {
+        const vacSpId = linkedVac.ID || linkedVac.id;
+        postCloseVacancy(vacSpId, 'ปิดอัตโนมัติ: ผู้สมัครได้รับการจ้างงาน')
+          .then(r => {
+            if (r.ok) {
+              if (linkedVac.Status && typeof linkedVac.Status === 'object') linkedVac.Status.Value = 'Close';
+              else linkedVac.Status = 'Close';
+              renderVacancies();
+              showToast('ปิดตำแหน่งงานอัตโนมัติแล้ว');
+            } else if (r.conflict) {
+              showToast('ตำแหน่งงานถูกปิดไปแล้ว');
+            } else {
+              console.warn('[autoClose] ปิดตำแหน่งไม่สำเร็จ:', r.error || r);
+            }
+            loadVacancies();
+          })
+          .catch(e => console.error('[autoClose] error:', e));
+      } else {
+        setTimeout(() => loadVacancies(), 2000);
+      }
     }
   } finally {
     if (selEl) selEl.disabled = false;
