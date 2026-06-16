@@ -1689,6 +1689,9 @@ function fieldVal(id) {
   return (el.value ?? '').toString().trim();
 }
 
+// แปลงค่าเป็น string เสมอ — null/undefined → '' (flow HR_POST_NewCandidate กำหนด schema ทุก field เป็น String ไม่รับ null)
+function safeStr(v) { return (v === null || v === undefined) ? '' : String(v); }
+
 async function saveCandidate() {
   // #3 Timing guard: ห้ามบันทึกระหว่าง AI ยังอ่าน CV อยู่ (ฟิลด์อาจยังไม่ถูกกรอก)
   if (cvExtracting) { alert('⏳ AI กำลังอ่าน CV อยู่ กรุณารอสักครู่แล้วค่อยกดบันทึก'); return; }
@@ -1700,16 +1703,16 @@ async function saveCandidate() {
   if (!first || !last || !vacancyId) { alert('กรุณากรอกชื่อ นามสกุล และตำแหน่งที่สมัคร'); return; }
 
   const vac = vacancies.find(v=>(v.id||v.ID)==vacancyId);
-  const vacNum = parseInt(vacancyId, 10);
+  // ครอบทุก field ด้วย safeStr() ก่อนส่ง — กัน HTTP 400 TriggerInputSchemaMismatch (Expected String but got Null)
   const payload = {
-    Title: `${first} ${last}`,
-    Email: fieldVal('c-email'),
-    Phone: fieldVal('c-phone'),
-    VacancyID: Number.isNaN(vacNum) ? vacancyId : vacNum,  // กัน NaN → ส่งค่าเดิมแทน null
-    VacancyTitle: (vac ? getVTitle(vac) : '') || '',
-    CandidateStatus: fieldVal('c-status') || 'Screening',
-    FileName: cvFileBase64 ? cvFileName : null,
-    FileContent: cvFileBase64 || null,
+    Title: safeStr(`${first} ${last}`),
+    Email: safeStr(fieldVal('c-email')),
+    Phone: safeStr(fieldVal('c-phone')),
+    VacancyID: safeStr(vacancyId),
+    VacancyTitle: safeStr(vac ? getVTitle(vac) : ''),
+    CandidateStatus: safeStr(fieldVal('c-status')) || 'Screening',
+    FileName: safeStr(cvFileBase64 ? cvFileName : ''),
+    FileContent: safeStr(cvFileBase64),
   };
   // Safety net: ถ้า payload ไม่มี field สำคัญ (เช่นทุกค่าหลุดเป็น undefined) อย่ายิง Flow เด็ดขาด
   if (!payload.Title.trim() || !payload.VacancyID) {
@@ -1718,7 +1721,7 @@ async function saveCandidate() {
     return;
   }
   // BUG diagnose: log payload แบบตัด base64 ออก (FileContent ยาวมาก) เพื่อให้เห็น field ที่ส่งจริงใน console
-  console.log('[saveCandidate] POST payload:', {...payload, FileContent: cvFileBase64 ? `<base64 ${cvFileBase64.length} chars>` : null});
+  console.log('[saveCandidate] POST payload:', {...payload, FileContent: cvFileBase64 ? `<base64 ${cvFileBase64.length} chars>` : ''});
   const saveBtn = document.getElementById('c-save');
   saveBtn.disabled = true;
   saveBtn.textContent = '⏳ กำลังบันทึก...';

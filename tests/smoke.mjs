@@ -118,6 +118,15 @@ check('dropdown สาขา render จาก branchList', /branchList\.map\(b\s
 check('agent (toolResolveBranch) ใช้ branchList', /branchList\.find\(b\s*=>\s*normBranch/.test(html));
 check('static BRANCHES คงไว้เป็น fallback (172)', /const\s+BRANCHES\s*=\s*\[/.test(html));
 
+console.log('11) BugFix — saveCandidate ไม่ส่ง null (HTTP 400 TriggerInputSchemaMismatch)');
+check('มี helper safeStr()', /function\s+safeStr\s*\(/.test(html));
+// payload ของ saveCandidate ต้องครอบทุก field ด้วย safeStr (ไม่มี null/undefined literal หลุดเข้า payload)
+const saveBlock = (html.match(/async function saveCandidate\(\)[\s\S]*?\n}/) || [''])[0];
+['Title', 'Email', 'Phone', 'VacancyID', 'VacancyTitle', 'CandidateStatus', 'FileName', 'FileContent']
+  .forEach(f => check(`  payload.${f} ครอบด้วย safeStr`, new RegExp(`${f}:\\s*safeStr\\(`).test(saveBlock)));
+check('payload ไม่มี ": null" หลุด (FileName/FileContent)', !/:\s*null\b/.test(
+  (saveBlock.match(/const payload = \{[\s\S]*?\};/) || [''])[0]));
+
 console.log('');
 if (failures) { console.error(`SMOKE TEST FAILED — ${failures} ข้อ ❌`); process.exit(1); }
 console.log('SMOKE TEST PASSED ✅');
