@@ -1789,16 +1789,14 @@ async function saveCandidate() {
   if (!first || !last || !vacancyId) { alert('กรุณากรอกชื่อ นามสกุล และตำแหน่งที่สมัคร'); return; }
 
   const vac = vacancies.find(v=>(v.id||v.ID)==vacancyId);
-  // VacancyID ต้องเป็นรหัสธุรกิจ "VAC-YYYYMMDDHHMI-{ID}" (string) — G3 HR_AutoClose_OnHire filter vacancy ด้วยรหัสนี้
-  // (flow HR_POST_NewCandidate schema = String แล้ว) ไม่ใช่เลข SharePoint id — ส่งเลขไป G3 หา vacancy ไม่เจอ
-  const vacCode = vac ? getVacancyCode(vac) : '';
-  if (!vacCode) { alert('ไม่พบรหัส VacancyID ของตำแหน่งนี้ กรุณารีเฟรชรายการแล้วเลือกใหม่'); return; }
-  // field ที่เป็น String ครอบด้วย safeStr() กัน null (Expected String but got Null)
+  if (!vac) { alert('ไม่พบตำแหน่งนี้ กรุณารีเฟรชรายการแล้วเลือกใหม่'); return; }
+  // flow HR_POST_NewCandidate schema กำหนด VacancyID เป็น integer (SharePoint item ID ของ vacancy)
+  const vacIntId = Number(vac.ID || vac.id || 0);
   const payload = {
     Title: safeStr(`${first} ${last}`),
     Email: safeStr(fieldVal('c-email')),
     Phone: safeStr(fieldVal('c-phone')),
-    VacancyID: safeStr(vacCode),
+    VacancyID: vacIntId,
     VacancyTitle: safeStr(vac ? getVTitle(vac) : ''),
     CandidateStatus: safeStr(fieldVal('c-status')) || 'Screening',
     FileName: safeStr(cvFileBase64 ? cvFileName : ''),
