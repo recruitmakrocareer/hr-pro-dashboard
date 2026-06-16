@@ -1703,12 +1703,16 @@ async function saveCandidate() {
   if (!first || !last || !vacancyId) { alert('กรุณากรอกชื่อ นามสกุล และตำแหน่งที่สมัคร'); return; }
 
   const vac = vacancies.find(v=>(v.id||v.ID)==vacancyId);
-  // ครอบทุก field ด้วย safeStr() ก่อนส่ง — กัน HTTP 400 TriggerInputSchemaMismatch (Expected String but got Null)
+  const vacNum = parseInt(vacancyId, 10);
+  // VacancyID ต้องเป็น Integer ตาม schema ของ flow (ไม่ใช่ String) — กัน NaN → ยกเลิกการส่ง
+  if (Number.isNaN(vacNum)) { alert('ตำแหน่งที่สมัครไม่ถูกต้อง กรุณาเลือกใหม่'); return; }
+  // field ที่เป็น String ครอบด้วย safeStr() กัน null (Expected String but got Null);
+  // VacancyID ส่งเป็น number ตรง ๆ (schema = Integer — ถ้าส่ง string จะได้ Expected Integer but got String)
   const payload = {
     Title: safeStr(`${first} ${last}`),
     Email: safeStr(fieldVal('c-email')),
     Phone: safeStr(fieldVal('c-phone')),
-    VacancyID: safeStr(vacancyId),
+    VacancyID: vacNum,
     VacancyTitle: safeStr(vac ? getVTitle(vac) : ''),
     CandidateStatus: safeStr(fieldVal('c-status')) || 'Screening',
     FileName: safeStr(cvFileBase64 ? cvFileName : ''),

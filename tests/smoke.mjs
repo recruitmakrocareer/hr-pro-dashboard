@@ -118,12 +118,15 @@ check('dropdown สาขา render จาก branchList', /branchList\.map\(b\s
 check('agent (toolResolveBranch) ใช้ branchList', /branchList\.find\(b\s*=>\s*normBranch/.test(html));
 check('static BRANCHES คงไว้เป็น fallback (172)', /const\s+BRANCHES\s*=\s*\[/.test(html));
 
-console.log('11) BugFix — saveCandidate ไม่ส่ง null (HTTP 400 TriggerInputSchemaMismatch)');
+console.log('11) BugFix — saveCandidate type ตรง schema (HTTP 400 TriggerInputSchemaMismatch)');
 check('มี helper safeStr()', /function\s+safeStr\s*\(/.test(html));
-// payload ของ saveCandidate ต้องครอบทุก field ด้วย safeStr (ไม่มี null/undefined literal หลุดเข้า payload)
 const saveBlock = (html.match(/async function saveCandidate\(\)[\s\S]*?\n}/) || [''])[0];
-['Title', 'Email', 'Phone', 'VacancyID', 'VacancyTitle', 'CandidateStatus', 'FileName', 'FileContent']
+// String fields ต้องครอบ safeStr() กัน null (Expected String but got Null)
+['Title', 'Email', 'Phone', 'VacancyTitle', 'CandidateStatus', 'FileName', 'FileContent']
   .forEach(f => check(`  payload.${f} ครอบด้วย safeStr`, new RegExp(`${f}:\\s*safeStr\\(`).test(saveBlock)));
+// VacancyID ต้องเป็น Integer (vacNum) ไม่ใช่ safeStr/string (Expected Integer but got String)
+check('  payload.VacancyID เป็น integer (vacNum) ไม่ใช่ safeStr', /VacancyID:\s*vacNum\b/.test(saveBlock));
+check('  guard NaN ของ vacNum ก่อนส่ง', /Number\.isNaN\(vacNum\)/.test(saveBlock));
 check('payload ไม่มี ": null" หลุด (FileName/FileContent)', !/:\s*null\b/.test(
   (saveBlock.match(/const payload = \{[\s\S]*?\};/) || [''])[0]));
 
