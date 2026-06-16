@@ -1579,6 +1579,7 @@ async function saveVacancy() {
   const spId = document.getElementById('v-id').value;
   const payload = {
     id: spId ? parseInt(spId) : null,
+    Title: title,
     Position: title,
     Branch: branch,
     Status: document.getElementById('v-status').value,
@@ -2188,7 +2189,7 @@ async function toolCloseVacancies({ vacancy_ids }, containerId) {
 async function postVacancy(item) {
   const today = new Date().toISOString().split('T')[0];
   const payload = {
-    id: null, Position: item.Position, Branch: item.Branch, Count: item.Count || 1,
+    id: null, Title: item.Position, Position: item.Position, Branch: item.Branch, Count: item.Count || 1,
     Reporter: item.Reporter || '', Status: item.Status || 'Open', OpenDate: item.OpenDate || today,
   };
   if (CONFIG.POST_VACANCY_URL) {
