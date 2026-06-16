@@ -718,6 +718,9 @@ const CONFIG = {
   // Flow: HR_UPDATE_CandidateStatus (G4) — บันทึกสถานะผู้สมัครกลับ SharePoint ({id, CandidateStatus} → 200 {StatusDate})
   // optional — ถ้ายังไม่ตั้ง secret dropdown สถานะจะอัปเดตเฉพาะใน memory (ไม่ persist)
   UPDATE_CANDIDATESTATUS_URL: '__UPDATE_CANDIDATESTATUS_URL__',
+  // Flow: HR_DELETE_Candidate — ลบผู้สมัครออกจาก List `Candidates` ({id} → 200 {success} / 400)
+  // optional — ถ้ายังไม่ตั้ง secret ปุ่มลบจะลบเฉพาะใน memory (ไม่ persist ลง SharePoint)
+  DELETE_CANDIDATE_URL: '__DELETE_CANDIDATE_URL__',
   // Flow: GET BranchMaster — คืนรายการสาขา (LocationCode/NameTH/NameEN/Region/AreaHR/...) สำหรับ lookup Area HR
   // optional — ถ้ายังไม่ตั้ง secret คอลัมน์ Area HR จะแสดง '-'
   GET_BRANCHMASTER_URL: '__GET_BRANCHMASTER_URL__',
@@ -1314,6 +1317,51 @@ async function handleStatusChange(candidateId, newStatus, selEl) {
   }
 }
 
+// ===================== CANDIDATE DELETE =====================
+// ลบผู้สมัครออกจาก SharePoint ผ่าน flow HR_DELETE_Candidate — contract: { id:String(item ID) } → 200 {success} / 400
+async function deleteCandidate(candidateId) {
+  if (!CONFIG.DELETE_CANDIDATE_URL) {
+    return { success: true, id: candidateId, local: true };   // ไม่มี flow → ลบเฉพาะ memory
+  }
+  const res = await fetch(CONFIG.DELETE_CANDIDATE_URL, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: String(candidateId) })
+  });
+  const raw = await res.text();
+  let data = {}; try { data = raw ? JSON.parse(raw) : {}; } catch {}
+  if (!res.ok) {   // id ผิด/ขาด → flow ตอบ 400 → คืน error ให้ caller ไม่ throw
+    console.error('[deleteCandidate] server response:', res.status, raw.slice(0,300));
+    return { success: false, error: data.error || `HTTP ${res.status}` };
+  }
+  return { success: true, ...data };
+}
+
+// ผูกกับปุ่ม 🗑️ บนการ์ดผู้สมัคร — ยืนยันก่อนลบ แล้วลบออกจาก memory + refresh การ์ด/badge
+async function handleDeleteCandidate(candidateId, btnEl) {
+  const c = candidates.find(x => String(x.ID || x.id) === String(candidateId));
+  const cName = c ? (fieldText(c.Title) || 'ผู้สมัครรายนี้') : 'ผู้สมัครรายนี้';
+  if (!confirm(`ต้องการลบ "${cName}" ออกจากรายชื่อผู้สมัครใช่หรือไม่?\n(การลบนี้ย้อนกลับไม่ได้)`)) return;
+  if (btnEl) btnEl.disabled = true;
+  try {
+    const result = await deleteCandidate(candidateId);
+    if (!result || !result.success) {
+      alert('ลบไม่สำเร็จ: ' + ((result && result.error) || 'unknown') + '\n(ดู Console สำหรับรายละเอียด)');
+      if (btnEl) btnEl.disabled = false;
+      return;
+    }
+    // ลบออกจาก memory + re-render ทันที (ไม่รีโหลดทับ — GET flow อาจยังคืนรายการเดิมก่อน SharePoint commit)
+    candidates = candidates.filter(x => String(x.ID || x.id) !== String(candidateId));
+    renderCandidates();
+    if (vacancies.length) renderVacancies();   // refresh badge จำนวนผู้สมัครต่อ vacancy
+    updateKPI();
+    showToast(`ลบ ${cName} แล้ว`);
+  } catch (e) {
+    console.error('handleDeleteCandidate error:', e);
+    alert('ลบไม่สำเร็จ: ' + (e.message || 'unknown'));
+    if (btnEl) btnEl.disabled = false;
+  }
+}
+
 // ===================== RENDER CANDIDATES =====================
 // ดึง URL ของ CV — รองรับชื่อ field สำรอง และ SharePoint Hyperlink ที่คืนเป็น object {Url}
 function cvLinkOf(c) {
@@ -1376,6 +1424,7 @@ function renderCandidates() {
           <div class="candidate-name">${cName}</div>
           <div class="candidate-pos">${cPos}</div>
         </div>
+        <button class="btn btn-sm btn-danger" style="margin-left:auto;padding:4px 8px" title="ลบผู้สมัคร" onclick="handleDeleteCandidate('${cId}', this)">🗑️</button>
       </div>
       <div class="candidate-meta">
         <span>📧 ${fieldText(c.Email)||'-'}</span>

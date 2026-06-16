@@ -143,6 +143,16 @@ check('function clearCandidateFilter()', /function\s+clearCandidateFilter\s*\(/.
 check('badge มี stopPropagation + เรียก showVacancyCandidates', /event\.stopPropagation\(\);\s*showVacancyCandidates\(/.test(html));
 check('renderCandidates เคารพ candidateVacancyFilter', /candidateVacancyFilter\s*!=\s*null/.test(html));
 
+console.log('13) Candidate Delete — ลบผู้สมัคร (flow HR_DELETE_Candidate + memory fallback)');
+check('CONFIG มี DELETE_CANDIDATE_URL', /DELETE_CANDIDATE_URL:\s*'__DELETE_CANDIDATE_URL__'/.test(html));
+check('function deleteCandidate() เรียก DELETE_CANDIDATE_URL', /async function deleteCandidate\([\s\S]*?CONFIG\.DELETE_CANDIDATE_URL/.test(html));
+check('deleteCandidate fallback memory เมื่อไม่มี URL (local:true)', /if\s*\(!CONFIG\.DELETE_CANDIDATE_URL\)[\s\S]{0,80}local:\s*true/.test(html));
+check('function handleDeleteCandidate() ยืนยันก่อนลบ (confirm)', /async function handleDeleteCandidate\([\s\S]*?confirm\(/.test(html));
+check('handleDeleteCandidate ลบออกจาก memory + updateKPI', /candidates\s*=\s*candidates\.filter\([\s\S]*?updateKPI\(\)/.test(html));
+check('ปุ่ม 🗑️ บนการ์ดเรียก handleDeleteCandidate', /onclick="handleDeleteCandidate\('\$\{cId\}', this\)"/.test(html));
+check('deploy.yml inject DELETE_CANDIDATE_URL',
+  /DELETE_CANDIDATE_URL:\s*\$\{\{\s*secrets\.DELETE_CANDIDATE_URL\s*\}\}/.test(readFileSync(join(root, '.github/workflows/deploy.yml'), 'utf8')));
+
 console.log('');
 if (failures) { console.error(`SMOKE TEST FAILED — ${failures} ข้อ ❌`); process.exit(1); }
 console.log('SMOKE TEST PASSED ✅');
