@@ -1014,10 +1014,11 @@ async function loadBranchMaster() {
       const code   = fieldText(b.Title) || fieldText(b.LocationCode);
       const areaHR = fieldText(b.AreaHR) || fieldText(b['Area HR']) || fieldText(b.AreaHRName) || fieldText(b.Area_HR) || fieldText(b.Area);
       const region = fieldText(b.Region);
+      const regionId = fieldText(b['Region#Id']) || fieldText(b.Region_x0023_Id);   // lookup id ของ Region (ใช้ตอน POST vacancy)
       const nameEN = fieldText(b.NameEN) || fieldText(b.NameEn);
       const od     = fieldText(b.OD);
       const regionalCEO = fieldText(b.RegionalCEO) || fieldText(b.RegionalCeo);
-      const rec = { areaHR, region, nameTH, nameEN, od, regionalCEO, locationCode: code };
+      const rec = { id, areaHR, region, regionId, nameTH, nameEN, od, regionalCEO, locationCode: code };
       if (id)     map['#id:' + id] = rec;            // คีย์หลัก: BranchMaster item ID (ตรงกับ JobVacancy.Branch#Id — แม่นสุด)
       if (nameTH) map[normBranch(nameTH)] = rec;     // คีย์สำรอง: ชื่อสาขาไทย
       if (code)   map['#code:' + code.toLowerCase()] = rec;
@@ -1577,11 +1578,17 @@ async function saveVacancy() {
   const branch = document.getElementById('v-branch').value;
   if (!title||!branch) { alert('กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน'); return; }
   const spId = document.getElementById('v-id').value;
+  // Branch/Region lookup → ส่ง ID จาก BranchMaster (ดู postVacancy)
+  const info = branchInfo[normBranch(branch)] || {};
   const payload = {
     id: spId ? parseInt(spId) : null,
     Title: title,
     Position: title,
     Branch: branch,
+    BranchId: info.id ? Number(info.id) : null,
+    Region: info.region || '',
+    RegionId: info.regionId ? Number(info.regionId) : null,
+    OD: info.od || '', RegionalCEO: info.regionalCEO || '',
     Status: document.getElementById('v-status').value,
     Count: parseInt(document.getElementById('v-slots').value)||1,
     Reporter: document.getElementById('v-recruiter').value,
@@ -2188,8 +2195,19 @@ async function toolCloseVacancies({ vacancy_ids }, containerId) {
 
 async function postVacancy(item) {
   const today = new Date().toISOString().split('T')[0];
+  // Branch/Region เป็น lookup field ใน SharePoint → ต้องส่ง "ID" (จาก BranchMaster) ไม่ใช่ string
+  // Title (text) ส่งชื่อตำแหน่งเพื่อให้ row โผล่ในตาราง (Position lookup จะ resolve ฝั่ง flow ไม่ได้ก็ยังเห็นจาก Title)
+  const info = branchInfo[normBranch(item.Branch)] || {};
   const payload = {
-    id: null, Title: item.Position, Position: item.Position, Branch: item.Branch, Count: item.Count || 1,
+    id: null,
+    Title: item.Position,
+    Position: item.Position,
+    Branch: item.Branch,
+    BranchId: info.id ? Number(info.id) : null,   // → map เป็น Branch lookup ใน flow
+    Region: info.region || '',
+    RegionId: info.regionId ? Number(info.regionId) : null,   // → map เป็น Region lookup ใน flow
+    OD: info.od || '', RegionalCEO: info.regionalCEO || '',
+    Count: item.Count || 1,
     Reporter: item.Reporter || '', Status: item.Status || 'Open', OpenDate: item.OpenDate || today,
   };
   if (CONFIG.POST_VACANCY_URL) {
