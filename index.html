@@ -1323,15 +1323,21 @@ async function deleteCandidate(candidateId) {
   if (!CONFIG.DELETE_CANDIDATE_URL) {
     return { success: true, id: candidateId, local: true };   // ไม่มี flow → ลบเฉพาะ memory
   }
+  // ใช้ text/plain (CORS-safelisted) ไม่ใช่ application/json — flow runtime ใหม่ (powerplatform.com)
+  // reject content-type application/json ("not well formed") + เลี่ยง CORS preflight
+  // trigger ต้องมี Request Body JSON Schema เพื่อให้ triggerBody()?['id'] parse จาก text body ได้
   const res = await fetch(CONFIG.DELETE_CANDIDATE_URL, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
     body: JSON.stringify({ id: String(candidateId) })
   });
   const raw = await res.text();
   let data = {}; try { data = raw ? JSON.parse(raw) : {}; } catch {}
   if (!res.ok) {   // id ผิด/ขาด → flow ตอบ 400 → คืน error ให้ caller ไม่ throw
     console.error('[deleteCandidate] server response:', res.status, raw.slice(0,300));
-    return { success: false, error: data.error || `HTTP ${res.status}` };
+    // error อาจเป็น object ซ้อน ({error:{message}}) → ดึง message ให้อ่านง่าย (กัน "[object Object]")
+    const err = data.error;
+    const msg = (err && typeof err === 'object') ? (err.message || JSON.stringify(err)) : (err || `HTTP ${res.status}`);
+    return { success: false, error: msg };
   }
   return { success: true, ...data };
 }
