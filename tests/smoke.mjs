@@ -106,6 +106,11 @@ check('updateCandidateStatus ส่ง contract { id, CandidateStatus }',
 check('dropdown สถานะผูก onchange=handleStatusChange', /onchange="handleStatusChange\(/.test(html));
 check('handleStatusChange มี logic auto-close เมื่อ Hired (AC-2)',
   /newStatus\s*===\s*'Hired'/.test(html));
+const hscBlock = (html.match(/async function handleStatusChange\([\s\S]*?\n}/) || [''])[0];
+check('handleStatusChange optimistic update (c.CandidateStatus = newStatus)',
+  /c\.CandidateStatus\s*=\s*newStatus/.test(hscBlock));
+check('handleStatusChange ไม่รีโหลด candidates ทับทันที (กัน GET ค่าเก่าทับ)',
+  !/await\s+loadCandidates\(\)/.test(hscBlock));
 check('deploy.yml inject UPDATE_CANDIDATESTATUS_URL',
   /UPDATE_CANDIDATESTATUS_URL/.test(readFileSync(join(root, '.github/workflows/deploy.yml'), 'utf8')));
 

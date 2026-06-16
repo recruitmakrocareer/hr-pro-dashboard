@@ -1294,14 +1294,12 @@ async function handleStatusChange(candidateId, newStatus, selEl) {
       if (selEl) selEl.value = prev || newStatus;   // rollback dropdown กลับค่าเดิม
       return;
     }
-    if (result.local) {   // dev/mock → อัปเดต array เอง
-      const c = candidates.find(x => String(x.ID || x.id) === String(candidateId));
-      if (c) c.CandidateStatus = newStatus;
-      renderCandidates();
-      if (vacancies.length) renderVacancies();
-    } else {
-      await loadCandidates();   // AC-4: reload → การ์ด/badge ผู้สมัคร + badge บนตาราง vacancy อัปเดต
-    }
+    // Optimistic update: อัปเดตค่าใน memory + re-render ทันที (AC-4)
+    // อย่ารีโหลดทันที — GET flow มักคืนค่าเก่า (SharePoint ยัง commit ไม่ทัน) แล้วทับการ์ดกลับเป็นค่าเดิม
+    const c = candidates.find(x => String(x.ID || x.id) === String(candidateId));
+    if (c) c.CandidateStatus = newStatus;
+    renderCandidates();
+    if (vacancies.length) renderVacancies();
     showToast(`อัปเดตสถานะเป็น ${newStatus} แล้ว`);
     // AC-2: 'Hired' → flow G3 (HR_AutoClose_OnHire) ปิด vacancy ที่ผูกกันอัตโนมัติ — reload vacancy เพื่อสะท้อนผล (ไม่ต้องเรียก closeVacancy ซ้ำ)
     if (newStatus === 'Hired' && CONFIG.GET_VACANCIES_URL) {
