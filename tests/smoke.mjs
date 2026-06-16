@@ -52,6 +52,7 @@ const requiredFns = [
   'renderVacancies', 'renderCandidates', 'updateKPI', 'showPage',
   'handleUrlAction', 'matchVacancyId', 'openCandidateModal',
   'editVacancy', 'selectWithValue', 'confirmCloseVacancy', 'hideClosePanel', 'postCloseVacancy',
+  'updateCandidateStatus', 'handleStatusChange',
   'getVRegion', 'getVAreaHR', 'populateVacancyFilters', 'loadBranchMaster', 'branchOf', 'stampDailyKPI',
   'loadSnapshots', 'renderTrend', 'selectTrend',
   // Web Agent tools (client-side)
@@ -68,7 +69,7 @@ console.log('3b) Agent tool names (Web Agent Spec) ถูกประกาศ�
   .forEach(t => check(`tool '${t}'`, new RegExp(`name:\\s*['"]${t}['"]`).test(html)));
 
 console.log('4) CONFIG keys ครบ');
-['GET_VACANCIES_URL', 'POST_VACANCY_URL', 'GET_CANDIDATES_URL', 'POST_CANDIDATE_URL', 'CLOSE_VACANCY_URL', 'GET_BRANCHMASTER_URL', 'POST_SNAPSHOT_URL', 'GET_SNAPSHOTS_URL', 'PROXY_URL', 'CLAUDE_API_KEY']
+['GET_VACANCIES_URL', 'POST_VACANCY_URL', 'GET_CANDIDATES_URL', 'POST_CANDIDATE_URL', 'CLOSE_VACANCY_URL', 'UPDATE_CANDIDATESTATUS_URL', 'GET_BRANCHMASTER_URL', 'POST_SNAPSHOT_URL', 'GET_SNAPSHOTS_URL', 'PROXY_URL', 'CLAUDE_API_KEY']
   .forEach(k => check(`CONFIG.${k}`, new RegExp(`${k}\\s*:`).test(html)));
 
 console.log('5) TD-01 guard — ไม่มี URL ลับ (sig=) hardcode ใน index.html');
@@ -98,6 +99,15 @@ check('postCloseVacancy เช็ค status 409', /status\s*===\s*409|res\.statu
 check('postCloseVacancy ส่ง contract { id, CloseNote, ClosedBy }',
   /CloseNote:[^,]*,\s*ClosedBy:/.test(html));
 check('confirmCloseVacancy จัดการ conflict (ไม่ throw error)', /r\.conflict/.test(html));
+
+console.log('9) G4 — บันทึก CandidateStatus กลับ SharePoint (HR_UPDATE_CandidateStatus)');
+check('updateCandidateStatus ส่ง contract { id, CandidateStatus }',
+  /id:\s*String\(candidateId\)[\s\S]{0,40}CandidateStatus:\s*newStatus/.test(html));
+check('dropdown สถานะผูก onchange=handleStatusChange', /onchange="handleStatusChange\(/.test(html));
+check('handleStatusChange มี logic auto-close เมื่อ Hired (AC-2)',
+  /newStatus\s*===\s*'Hired'/.test(html));
+check('deploy.yml inject UPDATE_CANDIDATESTATUS_URL',
+  /UPDATE_CANDIDATESTATUS_URL/.test(readFileSync(join(root, '.github/workflows/deploy.yml'), 'utf8')));
 
 console.log('');
 if (failures) { console.error(`SMOKE TEST FAILED — ${failures} ข้อ ❌`); process.exit(1); }

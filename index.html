@@ -195,6 +195,12 @@ tbody tr:hover{background:#F8F7FF}
 .badge-hold{background:var(--warn-light);color:#633806}.badge-hold::before{background:#854F0B}
 /* G6 — badge จำนวนผู้สมัครต่อ vacancy (ในคอลัมน์ตำแหน่งงาน) */
 .cand-badge{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600;background:var(--accent-light);color:#085041;vertical-align:middle;white-space:nowrap}
+/* G4 — dropdown สถานะผู้สมัคร (บันทึกกลับ SharePoint) สีตามสถานะ */
+.cstat{font-size:12px;font-weight:600;border-radius:20px;padding:3px 10px;border:none;cursor:pointer;-webkit-appearance:none;appearance:none}
+.cstat:disabled{opacity:.6;cursor:wait}
+.cstat-open{background:var(--accent-light);color:#085041}
+.cstat-hold{background:var(--warn-light);color:#633806}
+.cstat-close{background:var(--danger-light);color:#791F1F}
 
 /* ===================== CHAT PANEL ===================== */
 .chat-panel{
@@ -707,6 +713,9 @@ const CONFIG = {
   // Flow: HR_CLOSE_Vacancy (FL-01) — ปิดตำแหน่งงาน + บันทึก Status='Close' / ClosedDate / ClosedBy
   // ถ้า secret ยังไม่ถูกตั้ง → ว่าง → closeVacancy() จะ fallback ไปใช้ POST_VACANCY_URL (ตั้ง Status ได้อยู่แล้ว)
   CLOSE_VACANCY_URL:  'https://4d5e96e05cb6e591aefe0bce82117f.8e.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/e52e79425c2a4927b73cd2c2f72897ad/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=qhUToHYXRbklfaK_pBDEBRqSTJ1YATh__PY6raZvkYQ',
+  // Flow: HR_UPDATE_CandidateStatus (G4) — บันทึกสถานะผู้สมัครกลับ SharePoint ({id, CandidateStatus} → 200 {StatusDate})
+  // optional — ถ้ายังไม่ตั้ง secret dropdown สถานะจะอัปเดตเฉพาะใน memory (ไม่ persist)
+  UPDATE_CANDIDATESTATUS_URL: 'https://4d5e96e05cb6e591aefe0bce82117f.8e.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/61d3af368ac1440b80562d49b3902f54/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=2ke_K4DpVwEKgT7X0zE928qrApVM5vNsevpFqbU1tSo',
   // Flow: GET BranchMaster — คืนรายการสาขา (LocationCode/NameTH/NameEN/Region/AreaHR/...) สำหรับ lookup Area HR
   // optional — ถ้ายังไม่ตั้ง secret คอลัมน์ Area HR จะแสดง '-'
   GET_BRANCHMASTER_URL: 'https://4d5e96e05cb6e591aefe0bce82117f.8e.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/e1d8fa0a1bee4450a6f7a8c2f152d3fa/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=ApO03-gbYNuQhOc_SnHI_WOvm1xuAMSZ4E6Wuvywd2Q',
@@ -732,6 +741,7 @@ console.log('[CONFIG] URLs present?', {
   GET_CANDIDATES_URL: !!CONFIG.GET_CANDIDATES_URL,
   POST_CANDIDATE_URL: !!CONFIG.POST_CANDIDATE_URL,
   CLOSE_VACANCY_URL: !!CONFIG.CLOSE_VACANCY_URL,
+  UPDATE_CANDIDATESTATUS_URL: !!CONFIG.UPDATE_CANDIDATESTATUS_URL,
   GET_BRANCHMASTER_URL: !!CONFIG.GET_BRANCHMASTER_URL,
   POST_SNAPSHOT_URL: !!CONFIG.POST_SNAPSHOT_URL,
   GET_SNAPSHOTS_URL: !!CONFIG.GET_SNAPSHOTS_URL,
@@ -1235,6 +1245,55 @@ function populateVacancyFilters() {
   fill('filter-area',     vacancies.map(getVAreaHR), 'ทุก Area HR');
 }
 
+// ===================== CANDIDATE STATUS SAVE (G4) =====================
+// บันทึกสถานะผู้สมัครกลับ SharePoint ผ่าน flow HR_UPDATE_CandidateStatus
+// contract: { id:String(Candidate item ID — ไม่ใช่ VacancyID), CandidateStatus } → 200 {success,CandidateStatus,StatusDate} / 400 invalid
+async function updateCandidateStatus(candidateId, newStatus) {
+  if (!CONFIG.UPDATE_CANDIDATESTATUS_URL) {
+    return { success: true, id: candidateId, CandidateStatus: newStatus, local: true };   // ไม่มี flow → อัปเดตเฉพาะ memory
+  }
+  const res = await fetch(CONFIG.UPDATE_CANDIDATESTATUS_URL, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: String(candidateId), CandidateStatus: newStatus })
+  });
+  const raw = await res.text();
+  let data = {}; try { data = raw ? JSON.parse(raw) : {}; } catch {}
+  if (!res.ok) {   // AC-3: ค่าผิด/ขาด id → flow ตอบ 400 → คืน error ให้ caller ไม่ throw
+    console.error('[updateCandidateStatus] server response:', res.status, raw.slice(0,300));
+    return { success: false, error: data.error || `HTTP ${res.status}` };
+  }
+  return { success: true, ...data };
+}
+
+// ผูกกับ dropdown สถานะบนการ์ดผู้สมัคร — เปลี่ยนค่าแล้วบันทึกทันที + refresh badge/การ์ด
+async function handleStatusChange(candidateId, newStatus, selEl) {
+  const prev = selEl ? (selEl.getAttribute('data-prev') || '') : '';
+  if (selEl) selEl.disabled = true;
+  try {
+    const result = await updateCandidateStatus(candidateId, newStatus);
+    if (!result || !result.success) {
+      alert('บันทึกสถานะไม่สำเร็จ: ' + ((result && result.error) || 'unknown') + '\n(ดู Console สำหรับรายละเอียด)');
+      if (selEl) selEl.value = prev || newStatus;   // rollback dropdown กลับค่าเดิม
+      return;
+    }
+    if (result.local) {   // dev/mock → อัปเดต array เอง
+      const c = candidates.find(x => String(x.ID || x.id) === String(candidateId));
+      if (c) c.CandidateStatus = newStatus;
+      renderCandidates();
+      if (vacancies.length) renderVacancies();
+    } else {
+      await loadCandidates();   // AC-4: reload → การ์ด/badge ผู้สมัคร + badge บนตาราง vacancy อัปเดต
+    }
+    showToast(`อัปเดตสถานะเป็น ${newStatus} แล้ว`);
+    // AC-2: 'Hired' → flow G3 (HR_AutoClose_OnHire) ปิด vacancy ที่ผูกกันอัตโนมัติ — reload vacancy เพื่อสะท้อนผล (ไม่ต้องเรียก closeVacancy ซ้ำ)
+    if (newStatus === 'Hired' && CONFIG.GET_VACANCIES_URL) {
+      setTimeout(() => loadVacancies(), 3000);
+    }
+  } finally {
+    if (selEl) selEl.disabled = false;
+  }
+}
+
 // ===================== RENDER CANDIDATES =====================
 // ดึง URL ของ CV — รองรับชื่อ field สำรอง และ SharePoint Hyperlink ที่คืนเป็น object {Url}
 function cvLinkOf(c) {
@@ -1257,6 +1316,12 @@ function renderCandidates() {
     const cStatus = fieldText(c.CandidateStatus) || 'Screening';
     const initials = (cName !== '-' ? cName : '?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
     const cv = cvLinkOf(c);
+    // G4 — dropdown แก้สถานะ → บันทึกกลับ SharePoint ทันที (สีตามสถานะ; ค่าเก่านอก 5 ตัวจะถูกใส่เป็น option ชั่วคราว)
+    const cId = c.ID || c.id;
+    const selCls = 'cstat ' + (statusColor[cStatus] || 'badge-hold').replace('badge-', 'cstat-');
+    const opts = CANDIDATE_STATUS_OPTIONS.includes(cStatus) ? CANDIDATE_STATUS_OPTIONS : [cStatus, ...CANDIDATE_STATUS_OPTIONS];
+    const statusSelect = `<select class="${selCls}" data-prev="${cStatus}" onchange="handleStatusChange('${cId}', this.value, this)">`
+      + opts.map(s => `<option value="${s}"${s === cStatus ? ' selected' : ''}>${s}</option>`).join('') + `</select>`;
     return `<div class="candidate-card">
       <div class="candidate-header">
         <div class="candidate-avatar">${initials}</div>
@@ -1270,7 +1335,7 @@ function renderCandidates() {
         <span>📱 ${fieldText(c.Phone)||'-'}</span>
       </div>
       <div class="candidate-footer">
-        <span class="badge ${statusColor[cStatus]||'badge-hold'}">${cStatus}</span>
+        ${statusSelect}
         ${cv?`<a class="cv-link" href="${cv}" target="_blank">📄 ดู CV</a>`:`<span style="font-size:12px;color:var(--text-3)">ยังไม่มี CV</span>`}
       </div>
     </div>`;
